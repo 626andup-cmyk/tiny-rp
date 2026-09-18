@@ -142,6 +142,57 @@ body {
   gap: 0.5rem;
 }
 
+/*
+  NARROW PHONES.
+
+  The buttons normally sit in whatever space is left beside the
+  character's name — a column maybe 200px wide on a small phone. Six
+  buttons in a 200px column stack FIVE rows deep and eat 40% of the
+  screen before you've read a word.
+
+  Two changes fix it. First, stop the name and the buttons competing for
+  one line: below 26rem the bar wraps, so the name gets its own line and
+  the buttons get the full width. Second, shave a little off the buttons,
+  which is often enough to save a whole row.
+
+  These numbers were measured rather than guessed, at five phone widths,
+  as top-bar height in pixels:
+
+                            320   360   390   412   430
+      before               220   137   137   137   137
+      wrapping only        172   172   172   172   137
+      wrapping + tighter   151   151   116   116   137
+
+  Note the middle row: wrapping ALONE made 360 and 390 worse, because a
+  full-width row of buttons still wrapped to three rows and the name now
+  cost a row of its own. Only the two changes together beat doing
+  nothing. Worth remembering the next time a change seems obviously good
+  — the way to find out is to measure the sizes you don't own.
+
+  `flex: 1 0 100%` is shorthand for three properties at once:
+     grow 1     take any spare space
+     shrink 0   but never get squashed smaller
+     basis 100% start out as wide as the whole line
+  Together they mean "give me a row to myself."
+*/
+@media (max-width: 26rem) {
+  .top-bar {
+    flex-wrap: wrap;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .tools {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    gap: 0.4rem;
+  }
+
+  .tools button {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.9rem;
+  }
+}
+
 
 /* ---------------------------------------------------------------------
    THE CHAT LOG

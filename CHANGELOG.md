@@ -2,6 +2,53 @@
 
 A record of what changed, and more importantly *why*. Real projects keep a file like this so that future-you (or anyone else) can understand decisions without digging through old chats.
 
+## Version 5
+
+### Why these features
+
+Version 4 was about the project surviving being downloaded. This one is about *your chats* surviving.
+
+Everything Tiny RP remembers — every chat, the card you loaded, whether chat style is on — lives in `localStorage`, which sounds permanent and isn't. It belongs to one browser on one device. Clearing your browsing data wipes it. So do some cleaner apps, "clear site data," and getting a new phone. There's no warning and no undo, and the first time you find out is the time it matters. A roleplay you've been in for weeks deserves to exist as a file you can copy somewhere.
+
+The file format is the part worth reading. It would be easy to dump the `messages` array to a file and call it done; `chat-backup.js` explains why it says what format and version it is instead, and that's a lesson that applies to every file you'll ever design.
+
+As always, **no README exercises were solved.** Backing up isn't one of them. Three new exercises (19 to 21) were added, built on the new code.
+
+### Added
+
+- **Back up** saves the current chat to a file like `wren-chat-2026-09-18.json`, and **Restore** reads one back. Both are in the top bar.
+  - The backup holds the **character as well as the messages**, so a restore actually resumes the roleplay instead of leaving you with orphaned text.
+  - The file is indented, so you can open a backup in any text editor and just read your own chat.
+  - Restoring **asks before replacing** what you have open — but only *after* checking the file, so you're never asked to confirm something that was going to fail anyway.
+- **`public/chat-backup.js`**, all pure functions, plus 18 tests. Mostly tests of the *refusals*, because the dangerous case isn't a backup that fails to load, it's one that loads *almost* correctly over the top of a good chat.
+  - It refuses: files that aren't JSON, JSON that isn't an object, JSON that isn't ours (a character card, say — also JSON, also has a name), backups from a **newer version** of Tiny RP, ones with no messages or no character, and ones where **any** message is damaged, not just the first.
+  - Filenames are built from the character's name with everything that isn't a letter or digit turned into a dash, so a character called `../../etc/passwd` becomes `etc-passwd-chat-….json`.
+- There are now **55 tests**, up from 37.
+
+### Changed
+
+- **The top bar wraps properly on narrow phones.** Six buttons wouldn't fit beside the character's name on a 320px screen: they stacked five rows deep and ate 40% of the display. Below 26rem the name now takes its own line and the buttons get the full width, slightly tightened.
+
+  The measurements are in `style.css`, and they're there because the obvious fix was wrong. Wrapping *alone* made 360px and 390px screens **worse** (172px, up from 137px) while only partly helping 320px. Wrapping plus slightly smaller buttons beats doing nothing everywhere:
+
+  | top bar height | 320 | 360 | 390 | 412 | 430 |
+  | --- | --- | --- | --- | --- | --- |
+  | before | 220 | 137 | 137 | 137 | 137 |
+  | wrapping only | 172 | 172 | 172 | 172 | 137 |
+  | wrapping + tighter | **151** | 151 | **116** | **116** | 137 |
+
+### How it was tested
+
+- All **55 tests** pass.
+- One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
+- The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
+- Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.
+
+### Not tested yet
+
+- **Restoring a backup on a different phone**, which is the actual use case. It should be no different — the file has no device in it — but it hasn't been done.
+- Everything in version 4's list still applies.
+
 ## Version 4
 
 ### Why these changes

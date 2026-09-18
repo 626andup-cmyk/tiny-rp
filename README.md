@@ -18,6 +18,8 @@ Bigger features added since version 1 (see `CHANGELOG.md` for the full story):
 
 Your own messages get wrapped in `<cht>` tags automatically, so you never have to type them (but typing them yourself still works). Typing never interrupts the bubbles, but sending does: anything still waiting appears at once, so your message lands after the full reply. If you leave the browser mid-reply, the rest shows up all at once when you come back.
 
+**Back up / Restore** saves a chat to a file you can keep, and reads it back. Everything else Tiny RP remembers lives in your browser's storage, which is tied to one browser on one phone — clearing your browsing data wipes it, and so does a new phone. A backup is a plain `.json` file you can open in any text editor, holding the character *and* the messages, because half a roleplay is the character it was with. `chat-backup.js` explains why the file says what format and version it is, which is how file formats survive the programs that wrote them.
+
 **Context memory** keeps long chats working. Models can only read so much at once, so when a chat outgrows the prompt budget, the oldest messages are left out of what gets sent. You can *see* this happen: those messages fade, and a dashed line reads "Wren can't see the 12 older messages above this line." Nothing is deleted; it's just out of the character's reach. **Show prompt** now opens with a size summary like "About 5,210 of 6,000 tokens. Sending 48 of 60 chat messages." The budget is `PROMPT_BUDGET_TOKENS` in `prompt-budget.js`; set it to fit your model.
 
 ## The files
@@ -38,11 +40,13 @@ tiny-rp/
 │   ├── chat-style.js    Helpers that split replies into bubbles.
 │   ├── card-loader.js   Reads character cards out of .png and .json files.
 │   ├── prompt-budget.js Decides how much chat history fits in the prompt.
+│   ├── chat-backup.js   Saves a chat to a file, and reads one back.
 │   └── character.json   The default character card.
 ├── tests/               Automatic checks. Run them with `bun test`.
 │   ├── chat-style.test.js
 │   ├── card-loader.test.js
 │   ├── prompt-budget.test.js
+│   ├── chat-backup.test.js
 │   └── server.test.js   Starts the real server and talks to it.
 └── .github/workflows/   Runs the tests on GitHub after every push.
     └── test.yml
@@ -50,7 +54,7 @@ tiny-rp/
 
 Note that `config.json` is **not** in the repository, on purpose: it holds your key, and `.gitignore` keeps it off GitHub. `config.example.json` is the one that ships, and it's what you copy to make your own.
 
-A suggested reading order: `index.html` first (shortest, sets the scene), then `app.js` (the main event), then `server.js`. After that, `prompt-budget.js` (short, and it explains the single most important limit in AI chat), then `chat-style.js` and its test file side by side: reading a function next to the examples that test it is one of the best ways to understand it. Save `card-loader.js` for when you're curious how files work at the byte level. `style.css` is for whenever you want to change how it looks.
+A suggested reading order: `index.html` first (shortest, sets the scene), then `app.js` (the main event), then `server.js`. After that, `prompt-budget.js` (short, and it explains the single most important limit in AI chat), then `chat-style.js` and its test file side by side: reading a function next to the examples that test it is one of the best ways to understand it. Save `card-loader.js` for when you're curious how files work at the byte level, and `chat-backup.js` for when you want to know how a file format is *designed* rather than read. `style.css` is for whenever you want to change how it looks.
 
 ## Setting it up
 
@@ -135,7 +139,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 37 small automatic checks. Run them with:
+The `tests/` folder holds 55 small automatic checks. Run them with:
 
 ```
 bun test
@@ -143,7 +147,7 @@ bun test
 
 They come in two flavors, and the difference is worth knowing.
 
-**Unit tests** (`chat-style`, `card-loader`, `prompt-budget`) check *pure functions*: give it an input, look at the output, nothing else involved. These are fast and easy to write, which is exactly why those three files were built as pure functions in the first place.
+**Unit tests** (`chat-style`, `card-loader`, `prompt-budget`, `chat-backup`) check *pure functions*: give it an input, look at the output, nothing else involved. These are fast and easy to write, which is exactly why those four files were built as pure functions in the first place.
 
 **Integration tests** (`server`) check things that can't be reduced to an input and an output. `server.js` listens on a port, reads a config file, and calls an AI provider over the internet. So instead the test *starts the real server* and talks to it the way your browser would. It gets away without an API key using two tricks worth stealing:
 
@@ -232,3 +236,11 @@ When you finish number 12, you'll have built the core ideas of most of what you 
 16. Change `PROMPT_BUDGET_TOKENS` to something tiny, like 300, and chat for a few turns. Watch the memory line climb, and see how quickly the character forgets things. Then set it back.
 17. Pin a message: let one important message (a first meeting, a promise) be marked "always remember" so it stays in the prompt even after it passes the memory line. You'll need to change `fitToBudget` *and* write a test for it.
 18. Rescue what's forgotten: when messages fall out of memory, ask the model to summarize them, and put the summary into the system message. That's how the "summarize" features in bigger frontends work.
+
+**Backup exercises**
+
+19. Every backup records a `savedAt` date, and `readBackup` currently throws it away. Return it too, and show "Restored a chat saved on 18 September" in the chat after a restore. (`new Date(text).toLocaleDateString()` does the formatting.) Start by changing the test that checks what `readBackup` returns.
+20. Back up *everything* at once: every character and every chat in storage, in a single file. `Object.keys(localStorage)` lists what's saved, and the keys starting `tiny-rp-chat:` are the chats. This is the exercise that makes the `version` field earn its keep — bump the format to version 2, and make `readBackup` **still accept a version 1 file** by converting it. That's a real compatibility shim, and it's the whole reason the number is in the file.
+21. Make Restore *merge* instead of replacing. If a backup starts with the same messages as the chat you have open, it's the same roleplay, and only the messages after the point where they stop matching are new. Add them and leave the rest alone. Harder than it sounds, worth writing tests for first, and it's the same problem version control solves for code.
+
+These three, in order, are a decent tour of what programming actually is: read a value you already have, extend a format without breaking the old one, and work out what changed between two lists.

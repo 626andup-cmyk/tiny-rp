@@ -107,6 +107,9 @@ const promptViewer    = document.getElementById("prompt-viewer");
 const chatStyleButton = document.getElementById("chat-style-button");
 const loadCardButton  = document.getElementById("load-card-button");
 const cardFileInput   = document.getElementById("card-file-input");
+const backUpButton    = document.getElementById("back-up-button");
+const restoreButton   = document.getElementById("restore-button");
+const backupFileInput = document.getElementById("backup-file-input");
 
 
 // =====================================================================
@@ -591,6 +594,90 @@ async function handleCardFile() {
 }
 
 
+// ---------------------------------------------------------------------
+//  saveBackup()
+//  Saves the chat to a file you can keep somewhere safe.
+//
+//  There is no "write a file" function in JavaScript, and that's on
+//  purpose: a web page that could drop files on your phone without
+//  asking would be a catastrophe. What a page CAN do is offer you a
+//  link, and it can click that link itself. So:
+//
+//    1. A BLOB is a lump of data with a type attached. Think of it as
+//       a file that only exists in memory.
+//    2. URL.createObjectURL gives that lump a temporary address, which
+//       looks like blob:http://localhost:8123/2f9c-… and only works
+//       inside this page.
+//    3. An <a> tag with a `download` attribute is a link that SAVES
+//       instead of navigating. We never add it to the page; an element
+//       doesn't have to be visible to be clicked.
+//    4. revokeObjectURL throws the address away again. Until you do,
+//       the browser keeps the whole blob in memory.
+//
+//  JSON.stringify(value, null, 2) indents the file with 2 spaces. It
+//  makes the file bigger, and it means you can open a backup in any
+//  text editor and read your own chat. Worth it.
+// ---------------------------------------------------------------------
+function saveBackup() {
+  const text = JSON.stringify(buildBackup(character, messages), null, 2);
+  const blob = new Blob([text], { type: "application/json" });
+  const address = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = address;
+  link.download = backupFilename(character.name);
+  link.click();
+
+  URL.revokeObjectURL(address);
+}
+
+
+// ---------------------------------------------------------------------
+//  handleBackupFile()
+//  Runs after you choose a backup file in the file picker.
+//
+//  Note the ORDER: we read and check the file BEFORE asking you to
+//  confirm anything. Being asked "replace your chat?" and then told the
+//  file was broken anyway is a small, avoidable insult.
+// ---------------------------------------------------------------------
+async function handleBackupFile() {
+  const file = backupFileInput.files[0];
+  if (!file) {
+    return; // you closed the picker without choosing anything
+  }
+
+  try {
+    // readBackup comes from chat-backup.js. It throws a readable
+    // Error if anything about the file is wrong.
+    const restored = readBackup(await file.text());
+
+    const question =
+      `Restore ${restored.messages.length} messages with ` +
+      `${restored.character.name}?\n\n` +
+      `This replaces the chat you have open.`;
+
+    if (confirm(question)) {
+      saveCharacter(restored.character);
+
+      // setCharacter switches us over and loads whatever chat that
+      // character already had saved; we then replace it with the
+      // backup's messages and save that instead.
+      setCharacter(restored.character);
+      messages = restored.messages;
+      saveChat();
+
+      lastError = null;
+      render();
+    }
+  } catch (error) {
+    lastError = "Couldn't restore that backup: " + error.message;
+    render();
+  }
+
+  backupFileInput.value = "";
+}
+
+
 // =====================================================================
 //  DRAWING THE PAGE
 // =====================================================================
@@ -980,6 +1067,12 @@ chatStyleButton.addEventListener("click", toggleChatStyle);
 // usual trick.)
 loadCardButton.addEventListener("click", () => cardFileInput.click());
 cardFileInput.addEventListener("change", handleCardFile);
+
+// Backups. Same trick as above: the visible button clicks the hidden
+// file picker.
+backUpButton.addEventListener("click", saveBackup);
+restoreButton.addEventListener("click", () => backupFileInput.click());
+backupFileInput.addEventListener("change", handleBackupFile);
 
 // When you switch away from the browser, phones pause or slow down
 // timers. Rather than have bubbles trickle in strangely when you come
