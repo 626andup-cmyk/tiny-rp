@@ -215,7 +215,7 @@ Both layers hold. But if you'd removed the check after reading only that comment
 ### Not tested yet
 
 - A **real AI provider**. Still only fakes. (The sandbox this was worked in can't reach `openrouter.ai` at all, which is its own kind of proof that nothing here needs it.)
-- A **real Weaver card**, same as before.
+- A **card exported by a real editor**, same as before.
 - The **on-screen keyboard**, still. A real Chromium at phone size has no keyboard, so `interactive-widget=resizes-content` remains unverified. The *layout* around it is now checked at two phone sizes, which is as close as this gets without a phone.
 - **Double-tap on a real touchscreen.** It now passes in a real browser with touch emulation, which is better than before, but emulated taps have perfect timing and real thumbs don't. If 350 ms feels wrong, `DOUBLE_TAP_WINDOW_MS` is still the knob.
 
@@ -271,7 +271,7 @@ As before, no README exercises were solved. Three new memory exercises were adde
 
 ### Why these features
 
-When you gave me free rein, I picked the features that close the gap between this teaching project and how you actually roleplay. You want replies to show up as separate chat bubbles, with realistic typing delays and a way to skip ahead. Your cards come out of the Lumiverse Weaver as PNGs. Version 2 lets you load a card like that and talk to it in chat style, in a frontend small enough to read end to end.
+When you gave me free rein, I picked the features that close the gap between this teaching project and how you actually roleplay. You want replies to show up as separate chat bubbles, with realistic typing delays and a way to skip ahead. Your cards are PNGs in the standard card format. Version 2 lets you load a card like that and talk to it in chat style, in a frontend small enough to read end to end.
 
 It's also a smaller, easier version of the Lumiverse extension problem. There's no extension API to fight here, so the core ideas (splitting, pacing, skipping) are laid out in plain view. If you ever go back to the extension, `chat-style.js` is written so it could be copied over nearly unchanged.
 
@@ -319,7 +319,7 @@ I deliberately did **not** solve any of the README exercises. They're still your
 ### Not tested yet (things to check on your phone)
 
 - A **real AI provider**. Only a fake one was used, so your first real message is the true test. Errors appear right in the chat.
-- A **real Weaver card**. The loader follows the published card format and passed tests with cards built to that format, but a real export hasn't been through it.
+- A **card exported by a real editor**. The loader follows the published card format and passed tests with cards built to that format, but a real export hasn't been through it.
 - **Double-tap on your actual phone.** It's built from ordinary taps rather than the browser's `dblclick` event, which is unreliable on phones. If 350 ms feels too tight or too loose, change `DOUBLE_TAP_WINDOW_MS` in `app.js`.
 - **The pacing itself.** 150 ms per character is a guess at a quick phone texter. Whether it *feels* right is up to you. See exercise 13.
 

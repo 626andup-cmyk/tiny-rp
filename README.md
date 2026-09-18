@@ -10,7 +10,7 @@ It loads a character card, shows the greeting, lets you chat, and saves the chat
 
 Bigger features added since version 1 (see `CHANGELOG.md` for the full story):
 
-**Load card** opens a real character card, `.png` or `.json`, including ones exported from the Lumiverse Weaver. The card is remembered, and each character keeps its own saved chat.
+**Load card** opens a real character card, `.png` or `.json`, from any editor that follows the published card format — SillyTavern, Chub, Lumiverse's DreamWeaver, or a card you wrote by hand. The card is remembered, and each character keeps its own saved chat.
 
 **Chat style** turns replies into separate text bubbles that appear one at a time, each after a "typing" delay based on its length. There's no cap on the delay. Double-tap the "is typing" line to show the rest immediately. The splitting rules are the same for you and the character:
 - Text inside `<cht>...</cht>` tags is one bubble.

@@ -4,8 +4,9 @@
 //
 //  A "character card" PNG looks like an ordinary picture, but the
 //  character's data is hidden INSIDE the image file. This file digs it
-//  out. Cards exported from the Lumiverse Weaver, SillyTavern, Chub, etc.
-//  all work the same way, so this reads any of them.
+//  out. There's one published format for this, so cards from
+//  SillyTavern, Chub, Lumiverse's DreamWeaver and anything else all
+//  work the same way, and this reads any of them.
 //
 //  THE BIG LESSON IN THIS FILE: files are just bytes.
 //  -------------------------------------------------
