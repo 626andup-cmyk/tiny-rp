@@ -40,6 +40,17 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### Fixed
 
+- **A reply could land in the wrong chat — or the wrong character's chat — and be saved there.** This is the worst bug found so far, because nothing crashed and nothing looked wrong.
+
+  A reply takes seconds to arrive, and you can act while you wait. Send disables itself during generation; **New chat** and **Load card** don't, because they're written in `index.html` rather than built by `createButton()`. So:
+
+  - Press **New chat** while a reply is in flight, and the old character's answer arrives and is pushed onto the top of your brand-new chat, then saved.
+  - **Switch character** mid-reply, and Wren's answer is filed under the new character's name in storage. It appears as something *they* said.
+
+  The cause is that `generate()` pushed its result into whatever `messages` happened to be by the time the reply came back, with no check that it was still the same conversation. The fix is the standard one: note which chat the request was *for*, and when the answer arrives, check that's still the chat you're in. If it isn't, drop the answer — there's nowhere correct to put it.
+
+  It's worth reading the comment in `generate()` even if you never touch this code, because the shape of the problem is everywhere in async programming: **a slow answer can outlive the question.** Search-as-you-type, loading a page you've already navigated away from, any request you can cancel by clicking something else — all the same bug wearing different clothes.
+
 - **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
 
   It was found by the property test above, which is exactly the point of writing one. No example test had tried a doubled opening tag, because it wouldn't occur to a person to try it. There's now a regression test with the fuzzer's own counterexample in it.
@@ -63,6 +74,9 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.
 - The property tests were run against **ten different random seeds** (about 40,000 generated inputs) after the tag fix. No further violations turned up. They were also checked against the *unfixed* `chat-style.js`, where the tag rule fails as it should — a property test that passes on the broken version is testing nothing, same as any other test.
+- **The app was chaos tested.** Two kinds:
+  - *Targeted*: start a generation against a deliberately slow provider, then press New chat or switch character while it's in the air, and check where the reply ends up. That's what caught the stale-reply bug, in both its forms, including the copy written to storage.
+  - *Random*: 300 randomly chosen actions — send, delete, regenerate, toggle chat style, tap the typing indicator, new chat, redraw — fired in a deterministic random order, checking after **every single one** that `messages` still holds only valid messages, that any in-progress reveal still points at a message that exists, and that the screen never shows more messages than exist. No violations, and no uncaught errors. The state machine is sound; the bug was purely in the async gap.
 - **Practice mode was driven in a real browser**, 7 checks: a normal reply arrives using the character's actual name, `/error` shows the failure in the chat, `/empty` gives `(empty reply)`, `/bubbles` reveals bubbles one at a time under chat style, and a long practice chat makes the memory line appear. No uncaught errors throughout.
 
 ### Not tested yet

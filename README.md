@@ -241,6 +241,8 @@ GitHub runs `bun test` by itself after every push (see `.github/workflows/test.y
 
 **Property (in testing).** A rule that must hold for every possible input, rather than a single example. "Saving then loading gives back what you started with" is a property. See `tests/properties.test.js`.
 
+**Race condition.** A bug where the result depends on which of two things happens first. They're nasty because the code looks right and usually *is* right — the bad ordering just doesn't come up most of the time. See the stale-reply comment in `generate()` for a real one that lived in this app: a reply arriving after you'd already started a different chat.
+
 **Seed.** The starting number for a random number generator. The same seed always produces the same "random" sequence, which is how a test can use random data and still fail identically every time.
 
 ## Exercises

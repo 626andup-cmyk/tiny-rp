@@ -90,6 +90,12 @@ let reveal = null;
 // When the typing indicator was last tapped (for double-tap detection).
 let lastTapTime = 0;
 
+// How many times we've swapped the whole chat out from under ourselves:
+// pressed New chat, loaded a card, restored a backup. It only ever goes
+// up, and the number itself means nothing. What matters is whether it
+// CHANGED while we were waiting for a reply. See generate().
+let chatChangeCount = 0;
+
 
 // ---------------------------------------------------------------------
 //  FINDING ELEMENTS ON THE PAGE
@@ -175,6 +181,11 @@ async function init() {
 // ---------------------------------------------------------------------
 function setCharacter(newCharacter) {
   stopReveal();
+
+  // Anything still being generated belongs to the chat we're leaving,
+  // not the one we're arriving at.
+  chatChangeCount = chatChangeCount + 1;
+
   character = newCharacter;
 
   // Show the name at the top of the page and on the browser tab.
@@ -201,6 +212,11 @@ function setCharacter(newCharacter) {
 // ---------------------------------------------------------------------
 function startNewChat() {
   stopReveal();
+
+  // Same reason as in setCharacter: a reply that's still on its way
+  // was meant for the chat we're throwing away.
+  chatChangeCount = chatChangeCount + 1;
+
   messages = [
     { role: "assistant", content: fillMacros(character.first_mes) },
   ];
@@ -341,6 +357,30 @@ async function generate() {
   // started so chat style can count the waiting time as "typing" time.
   const startedAt = Date.now();
 
+  // ---------------------------------------------------------------
+  //  THE STALE REPLY PROBLEM
+  //  -----------------------
+  //  A reply takes seconds to arrive, and you can do things while you
+  //  wait. Send disables itself, but "New chat" and "Load card" don't
+  //  — so you can throw away the whole conversation, or switch to a
+  //  different character entirely, while a reply is still in the post.
+  //
+  //  When it lands, the code below pushes it into `messages`. But by
+  //  then `messages` might be a DIFFERENT chat. That really happened:
+  //  pressing New chat mid-reply put the old character's answer at the
+  //  top of the fresh chat, and switching characters filed it under the
+  //  new character's name in storage. Nothing crashed; it just quietly
+  //  put words in the wrong person's mouth and saved them.
+  //
+  //  The fix is the standard one for every "what if it finished after I
+  //  stopped caring?" situation: note which chat you're generating FOR,
+  //  and when the answer arrives, check it's still that chat. If not,
+  //  throw the answer away. You'll meet this pattern any time a slow
+  //  answer can outlive the question — searching as you type, loading a
+  //  page you've already navigated away from, all of it.
+  // ---------------------------------------------------------------
+  const chatWhenStarted = chatChangeCount;
+
   try {
     // Send the prompt to OUR server (server.js), not straight to the
     // AI provider. See the top of server.js for why.
@@ -351,6 +391,14 @@ async function generate() {
     });
 
     const data = await response.json();
+
+    // The answer is here — but is it still wanted? If the chat was
+    // swapped out while we waited, this reply belongs to a conversation
+    // that no longer exists. Dropping it is the only correct thing to
+    // do; there's nowhere to put it.
+    if (chatWhenStarted !== chatChangeCount) {
+      return; // `finally` below still runs, which is the point of it
+    }
 
     if (!response.ok || data.error) {
       // `throw` jumps straight down to the `catch` block below.
@@ -367,8 +415,12 @@ async function generate() {
     }
 
   } catch (error) {
-    // Remember the problem so render() can show it in the chat.
-    lastError = error.message;
+    // Only complain if this is still the chat that asked. An error
+    // about a conversation you've already left is just confusing.
+    if (chatWhenStarted === chatChangeCount) {
+      // Remember the problem so render() can show it in the chat.
+      lastError = error.message;
+    }
 
   } finally {
     // `finally` runs no matter what: success OR error.
