@@ -124,10 +124,17 @@ function readBackup(text) {
     throw new Error("that's a JSON file, but not a Tiny RP chat backup.");
   }
 
+  // No version at all means the file is damaged, or was written by
+  // something that isn't Tiny RP. Say that, rather than blaming a
+  // future release — "backup version undefined" helps nobody.
+  if (typeof data.version !== "number") {
+    throw new Error("it doesn't say which version of the format it is.");
+  }
+
   // A file from the FUTURE: written by a later version of Tiny RP than
   // this one. We can't know what changed, so we say so plainly instead
   // of loading it wrong and corrupting a chat you cared about.
-  if (typeof data.version !== "number" || data.version > BACKUP_VERSION) {
+  if (data.version > BACKUP_VERSION) {
     throw new Error(
       `it was saved by a newer version of Tiny RP (backup version ${data.version}).`
     );

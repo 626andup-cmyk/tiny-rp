@@ -83,6 +83,9 @@ function parsePngCard(buffer) {
   // character, which is exactly right for tEXt chunks.
   const latin1 = new TextDecoder("latin1");
 
+  // iTXt chunks hold UTF-8 rather than one-byte-per-character text.
+  const utf8 = new TextDecoder("utf-8");
+
   // Collect every text chunk we find, by keyword.
   const found = {};
 
@@ -121,13 +124,35 @@ function parsePngCard(buffer) {
     }
 
     // Both of these start with a keyword and a zero byte, same as tEXt,
-    // so we can read the keyword even though we can't read the payload.
+    // so we can always read the keyword even when we can't read the rest.
     if (type === "zTXt" || type === "iTXt") {
       const data = bytes.subarray(dataStart, dataEnd);
       const zero = data.indexOf(0);
-      if (zero !== -1) {
-        const keyword = latin1.decode(data.subarray(0, zero)).toLowerCase();
-        if (keyword === "ccv3" || keyword === "chara") {
+      const keyword = zero === -1 ? "" : latin1.decode(data.subarray(0, zero)).toLowerCase();
+
+      if (keyword === "ccv3" || keyword === "chara") {
+        // An iTXt chunk goes:
+        //     keyword \0 [flag] [method] language \0 translated \0 text
+        // The FLAG byte says whether the text is compressed. When it's
+        // 0 the text is sitting right there in plain UTF-8, and it
+        // would be silly to tell you to re-export a card we can
+        // perfectly well read. (zTXt is always compressed, so it never
+        // gets this far.)
+        const isPlainText = type === "iTXt" && data[zero + 1] === 0;
+
+        if (isPlainText) {
+          // Step over the two flag bytes, then over the language tag
+          // and the translated keyword, each ending in its own zero.
+          const languageEnd = data.indexOf(0, zero + 3);
+          const translatedEnd =
+            languageEnd === -1 ? -1 : data.indexOf(0, languageEnd + 1);
+
+          if (translatedEnd === -1) {
+            unreadableChunks.push(type); // truncated; can't find the text
+          } else {
+            found[keyword] = utf8.decode(data.subarray(translatedEnd + 1));
+          }
+        } else {
           unreadableChunks.push(type);
         }
       }
@@ -223,13 +248,33 @@ function normalizeCard(rawCard) {
     throw new Error("That card has no character name in it.");
   }
 
+  // Cards are made by all sorts of tools, and a field that's supposed
+  // to hold text sometimes doesn't. A list of paragraphs instead of one
+  // string is the usual culprit; nulls and numbers turn up too.
+  //
+  // Everything downstream calls string methods on these — `.replace()`
+  // in fillMacros, `.split()` in splitIntoBubbles — so anything that
+  // isn't a string has to be dealt with HERE, at the edge, once. A card
+  // with a list in `description` used to be accepted, saved, and then
+  // throw on every single render, including after a reload, with an
+  // error that blamed character.json.
+  //
+  // Text we can't use becomes empty rather than something like
+  // "[object Object]": an empty description is obviously missing, while
+  // a line of nonsense looks like it might be your card's fault.
+  const asText = (value) => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return String(value);
+    return "";
+  };
+
   return {
-    name: data.name,
-    description: data.description ?? "",
-    personality: data.personality ?? "",
-    scenario: data.scenario ?? "",
-    first_mes: data.first_mes ?? "",
-    mes_example: data.mes_example ?? "",
+    name: String(data.name),
+    description: asText(data.description),
+    personality: asText(data.personality),
+    scenario: asText(data.scenario),
+    first_mes: asText(data.first_mes),
+    mes_example: asText(data.mes_example),
   };
 }
 

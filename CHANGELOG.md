@@ -42,7 +42,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 - **17 tests for the prompt builder**, which had none before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
-- There are now **94 tests**, up from 37.
+- There are now **101 tests**, up from 37.
 
 ### Fixed
 
@@ -85,6 +85,16 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
   None of those tell you it's the card that's broken. An error message is a user interface, and if a real card of yours won't load, the difference between these messages and the old ones is the difference between fixing it and giving up. Exercise 22 is now teaching the loader to read the compressed ones.
 
+- **Seven more, found by reviewing the whole version-5 diff from scratch** before calling it finished. All of them were confirmed by reproducing them first, and all have tests:
+
+  - **Any toolbar button blanked the page after a failed startup.** Version 4 added a friendly message when `character.json` won't load — but pressing Chat style, or New chat, or Show prompt on that screen called `render()`, which clears the chat log and *then* threw on `character.name`, deleting the explanation that had been there a second earlier. `render()` now knows how to draw a page with no character, which also means the "Load card" escape hatch works from that screen. This was a bug introduced by the previous fix, which is a good argument for reviewing your own diff.
+  - **A card field holding a list instead of text crashed every render, permanently.** `normalizeCard` checked only that a name existed. A card with `description: ["a", "b"]` was accepted, *saved*, and then threw on `.replace()` forever after, including across reloads, with an error blaming `character.json`. Card fields are now coerced to text at the edge.
+  - **A provider replying with a list of content pieces crashed the page.** The OpenAI-compatible format allows `content` to be a list — that's how images are carried — and some providers use it for plain text too. `server.js` now flattens it to text, so the front end can simply trust that a reply is a string.
+  - **A failed regeneration resurrected the reply it discarded.** `regenerate()` removed the last message but didn't save, so memory and storage disagreed until the next successful reply. If the provider was down, a refresh brought the old reply back.
+  - **Backups could be silently cancelled in some browsers.** The temporary download address was released on the line after the click, which Chrome tolerates and others don't.
+  - **A backup with no version was blamed on a future release** ("saved by a newer version of Tiny RP (backup version undefined)") rather than being called damaged.
+  - **Uncompressed `iTXt` cards are now read** instead of being turned away. The compression flag was ignored, so a perfectly readable card was met with "re-export this". `card-loader.js` now parses the chunk properly.
+
 - **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
 
   It was found by the property test above, which is exactly the point of writing one. No example test had tried a doubled opening tag, because it wouldn't occur to a person to try it. There's now a regression test with the fuzzer's own counterexample in it.
@@ -118,7 +128,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### How it was tested
 
-- All **94 tests** pass, in well under a second.
+- All **101 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.

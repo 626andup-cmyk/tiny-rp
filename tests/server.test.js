@@ -276,6 +276,47 @@ test("passes the provider's complaint through instead of hiding it", async () =>
   expect(data.error).toContain("invalid api key");
 });
 
+test("a reply sent as a list of pieces comes back as plain text", async () => {
+  // The OpenAI-compatible format allows content to be a LIST as well as
+  // a string — that's how images and attachments are carried — and some
+  // providers use it even for plain text. app.js calls .split() on
+  // whatever it gets, so a list arriving there crashed the page three
+  // files away. Flattening it here means the front end can just trust
+  // that a reply is text.
+  provider.body = {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Two " },
+          { type: "image_url", image_url: { url: "http://example.com/x.png" } },
+          { type: "text", text: "pieces." },
+        ],
+      },
+    }],
+  };
+
+  const response = await fetch(baseUrl + "/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+  });
+
+  expect(await response.json()).toEqual({ reply: "Two pieces." });
+});
+
+test("a reply that is neither text nor a list becomes an empty string", async () => {
+  provider.body = { choices: [{ message: { role: "assistant", content: 42 } }] };
+
+  const response = await fetch(baseUrl + "/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+  });
+
+  expect(await response.json()).toEqual({ reply: "" });
+});
+
 test("an empty reply comes back as an empty string, not a crash", async () => {
   provider.body = { choices: [] };
 

@@ -104,13 +104,10 @@ test("explains when a PNG has no card inside", () => {
 //  the difference between fixing it and giving up.
 // ---------------------------------------------------------------------
 
-// Build a chunk type we don't read, with a card-ish keyword in it.
-function makeUnreadablePng(type) {
-  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])];
-  // zTXt is: keyword, 0, compression method, then compressed bytes.
-  parts.push(makeChunk(type, new TextEncoder().encode("chara\0\0some-compressed-bytes")));
-  parts.push(makeChunk("IEND", new Uint8Array(0)));
-
+// Glue a list of byte arrays into one PNG.
+function assemble(chunks) {
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), ...chunks,
+                 makeChunk("IEND", new Uint8Array(0))];
   const total = parts.reduce((sum, part) => sum + part.length, 0);
   const png = new Uint8Array(total);
   let offset = 0;
@@ -121,13 +118,57 @@ function makeUnreadablePng(type) {
   return png.buffer;
 }
 
-test("says so when the card is in a compressed chunk it can't read", () => {
+// zTXt is:  keyword \0 [method] compressed-bytes
+function makeZtxtPng() {
+  return assemble([
+    makeChunk("zTXt", new TextEncoder().encode("chara\0\0" + "squashed-bytes")),
+  ]);
+}
+
+// iTXt is:  keyword \0 [flag] [method] language \0 translated \0 text
+// The FLAG byte is the one that matters: 0 means the text isn't
+// compressed at all, and is readable exactly as it sits.
+function makeItxtPng(compressionFlag, text) {
+  const head = new TextEncoder().encode("chara");
+  const tail = new TextEncoder().encode(text);
+  const data = new Uint8Array(head.length + 5 + tail.length);
+  data.set(head, 0);
+  data[head.length] = 0;                     // end of keyword
+  data[head.length + 1] = compressionFlag;
+  data[head.length + 2] = 0;                 // compression method
+  data[head.length + 3] = 0;                 // empty language tag
+  data[head.length + 4] = 0;                 // empty translated keyword
+  data.set(tail, head.length + 5);
+  return assemble([makeChunk("iTXt", data)]);
+}
+
+test("says so when the card is in a chunk it genuinely can't read", () => {
   // A PNG optimiser run over a card can turn its tEXt into a zTXt. The
   // data is still in there; we just can't get at it. Saying "no
   // character data" would be a lie.
-  for (const type of ["zTXt", "iTXt"]) {
-    expect(() => parsePngCard(makeUnreadablePng(type))).toThrow("compressed chunk");
-  }
+  expect(() => parsePngCard(makeZtxtPng())).toThrow("compressed chunk");
+
+  // An iTXt whose flag says "compressed" is the same story.
+  expect(() => parsePngCard(makeItxtPng(1, "squashed"))).toThrow("compressed chunk");
+});
+
+test("reads an iTXt chunk that isn't actually compressed", () => {
+  // Flag 0 means the text is sitting right there in plain UTF-8. It
+  // would be silly to tell someone to re-export a card we can read.
+  const png = makeItxtPng(0, encodeCard({ data: { name: "Wren" } }));
+  expect(parsePngCard(png).data.name).toBe("Wren");
+});
+
+test("an iTXt chunk that stops early is refused rather than misread", () => {
+  // Truncated after the flags: the language tag's terminator is missing,
+  // so there's no way to tell where the text begins.
+  const head = new TextEncoder().encode("chara");
+  const data = new Uint8Array(head.length + 3);
+  data.set(head, 0);
+  data[head.length] = 0;
+  data[head.length + 1] = 0; // uncompressed…
+  data[head.length + 2] = 0; // …but nothing follows
+  expect(() => parsePngCard(assemble([makeChunk("iTXt", data)]))).toThrow("compressed chunk");
 });
 
 test("says the data is damaged when the base64 won't decode", () => {
@@ -163,6 +204,36 @@ test("normalizeCard handles V1 cards (fields at the top level)", () => {
 
 test("normalizeCard refuses a card with no name", () => {
   expect(() => normalizeCard({ data: {} })).toThrow("no character name");
+});
+
+test("normalizeCard turns non-text fields into text", () => {
+  // A list of paragraphs instead of one string is the usual way a card
+  // arrives malformed. Everything downstream calls .replace() and
+  // .split() on these, so a list used to be accepted, saved, and then
+  // throw on every render — including after a reload.
+  const card = normalizeCard({
+    name: "X",
+    description: ["one", "two"],
+    personality: null,
+    scenario: { nested: true },
+    first_mes: 42,
+  });
+
+  for (const field of ["description", "personality", "scenario", "first_mes", "mes_example"]) {
+    expect(typeof card[field]).toBe("string");
+  }
+
+  // A number is meaningful, so it's kept. Anything we can't read
+  // becomes empty rather than "[object Object]": a missing description
+  // is obviously missing, while a line of nonsense looks deliberate.
+  expect(card.first_mes).toBe("42");
+  expect(card.description).toBe("");
+  expect(card.scenario).toBe("");
+});
+
+test("normalizeCard always gives back a string name", () => {
+  expect(normalizeCard({ name: 42 }).name).toBe("42");
+  expect(typeof normalizeCard({ name: "Wren" }).name).toBe("string");
 });
 
 test("normalizeCard refuses JSON that isn't a card at all", () => {

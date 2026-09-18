@@ -161,24 +161,19 @@ async function init() {
     setCharacter(startingCharacter);
 
   } catch (error) {
-    // Everything else in the app reports errors through render(), but we
-    // can't use it here: render() reads `character.name`, and the whole
-    // problem is that we have no character. So we write to the page
-    // directly. Without this, a missing or broken character.json left
-    // you staring at a blank screen with the explanation buried in the
-    // developer console.
-    chatLog.replaceChildren(
-      createNoteElement(
-        `Couldn't load ${CHARACTER_FILE}: ${error.message}. ` +
-          `Check that the server is running, then refresh the page.`,
-        "error"
-      )
-    );
+    lastError =
+      `Couldn't load ${CHARACTER_FILE}: ${error.message}. ` +
+      `Check that the server is running, then refresh the page.`;
 
     // The heading still says "Loading…" from index.html, which would be
-    // a lie from here on. There's nothing to send to, either.
+    // a lie from here on.
     nameHeading.textContent = "Tiny RP";
-    sendButton.disabled = true;
+
+    // render() knows how to draw a page with no character (see the top
+    // of it). Reporting the problem the same way every other error is
+    // reported, rather than writing to the page by hand, is what stops
+    // the next button press from wiping this message off the screen.
+    render();
   }
 }
 
@@ -533,6 +528,14 @@ function regenerate() {
   stopReveal();
   lastError = null;
   messages.pop(); // .pop() removes the last item
+
+  // Save immediately, rather than leaving it to generate() to save the
+  // replacement. If the new reply never arrives — the provider is down,
+  // the key is wrong — `messages` has dropped the old one but storage
+  // still has it, and the next refresh brings the discarded reply back
+  // from the dead. Whenever the array changes, the save should follow.
+  saveChat();
+
   generate();
 }
 
@@ -638,7 +641,11 @@ function saveBackup() {
   link.download = backupFilename(character.name);
   link.click();
 
-  URL.revokeObjectURL(address);
+  // Throw the temporary address away once the download has had a moment
+  // to start. Doing it on the very next line works in Chrome, but some
+  // browsers haven't begun reading the blob yet and quietly cancel the
+  // download instead — which would look exactly like nothing happening.
+  setTimeout(() => URL.revokeObjectURL(address), 1000);
 }
 
 
@@ -699,6 +706,27 @@ async function handleBackupFile() {
 //  disturbs what you're typing.
 // ---------------------------------------------------------------------
 function render() {
+  // ---------------------------------------------------------------
+  //  No character? Then there's no chat to draw, and everything below
+  //  this point reads `character.name`. That happens when the card
+  //  fails to load at startup.
+  //
+  //  This guard is load-bearing. Without it, pressing ANY toolbar
+  //  button on that error screen — they aren't all disabled, and
+  //  "Load card" mustn't be, since it's the way out — cleared the chat
+  //  log and then threw half way through, leaving a blank page with
+  //  the explanation deleted. The error had been on screen a moment
+  //  earlier, which is the most annoying possible way to lose it.
+  // ---------------------------------------------------------------
+  if (character === null) {
+    chatLog.replaceChildren();
+    if (lastError) {
+      chatLog.append(createNoteElement(lastError, "error"));
+    }
+    sendButton.disabled = true;
+    return;
+  }
+
   // Remember whether you were already looking at the bottom of the
   // chat. If you scrolled up to reread something, we shouldn't yank
   // you back down every time a bubble appears.

@@ -107,6 +107,16 @@ test("refuses a backup from a newer version of Tiny RP", () => {
     .toThrow("newer version");
 });
 
+test("a missing version is reported as damage, not as being from the future", () => {
+  // These used to say "saved by a newer version of Tiny RP (backup
+  // version undefined)", which blames a release that doesn't exist for
+  // a file that's simply broken.
+  for (const version of [undefined, null, "1", {}]) {
+    expect(() => readBackup(backupText({ version })))
+      .toThrow("doesn't say which version");
+  }
+});
+
 test("refuses a backup with no messages", () => {
   expect(() => readBackup(backupText({ messages: [] }))).toThrow("no messages");
   expect(() => readBackup(backupText({ messages: "lots" }))).toThrow("no messages");

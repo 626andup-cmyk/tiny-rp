@@ -200,6 +200,32 @@ async function serveStaticFile(path) {
 
 
 // ---------------------------------------------------------------------
+//  textOf(content)
+//  Turns whatever a provider put in `message.content` into plain text.
+//
+//  Two shapes are allowed by the OpenAI-compatible format:
+//      "just a string"
+//      [ { type: "text", text: "a piece" }, { type: "image_url", … } ]
+//  Anything else (null, a number, a missing field) becomes "", which
+//  app.js already knows how to show as "(empty reply)".
+// ---------------------------------------------------------------------
+function textOf(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    // Keep the text pieces, drop the images, glue the rest together.
+    return content
+      .map((piece) => (typeof piece?.text === "string" ? piece.text : ""))
+      .join("");
+  }
+
+  return "";
+}
+
+
+// ---------------------------------------------------------------------
 //  handleGenerate(request)
 //  The browser sends us a list of chat messages. We add the secret
 //  stuff (API key, model name, settings), send it all to the AI
@@ -288,11 +314,19 @@ async function handleGenerate(request) {
     // The `?.` is called OPTIONAL CHAINING. Normally, if `choices`
     // didn't exist, `data.choices[0]` would crash. With `?.`, it just
     // gives back `undefined` instead.
-    // The `??` means "if the left side is null/undefined, use the
-    // right side instead." So a missing reply becomes "".
-    const reply = data.choices?.[0]?.message?.content ?? "";
+    const content = data.choices?.[0]?.message?.content;
 
-    return Response.json({ reply: reply });
+    // `content` is USUALLY a string, and this used to assume it always
+    // was. But the OpenAI-compatible format also allows a LIST of
+    // content pieces — that's how images and other attachments are
+    // carried — and some providers use it even for plain text.
+    //
+    // app.js calls .split() on whatever comes back, so a list arriving
+    // here crashed the page three files away, with an error naming
+    // neither the provider nor the cause. Sorting it out at the edge,
+    // where we know what the provider's formats are, means everything
+    // downstream can simply trust that a reply is a string.
+    return Response.json({ reply: textOf(content) });
 
   } catch (error) {
     // Something went wrong before we even got an answer.
