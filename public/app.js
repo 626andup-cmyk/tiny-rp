@@ -15,7 +15,8 @@
 //    chat-style.js     splitIntoBubbles, wrapInBubbleTags, typingDelay
 //    card-loader.js    readCardFile
 //    prompt-budget.js  fitToBudget, PROMPT_BUDGET_TOKENS
-//    prompt-builder.js fillMacros, buildSystemMessage
+//    prompt-template.js fillTemplateText, buildSystemMessage,
+//                      systemMessageParts, defaultTemplate
 //    chat-backup.js    buildBackup, readBackup, backupFilename,
 //                      isUsableMessage
 //
@@ -222,7 +223,7 @@ function startNewChat() {
   chatChangeCount = chatChangeCount + 1;
 
   messages = [
-    { role: "assistant", content: fillMacros(character.first_mes, character.name, USER_NAME) },
+    { role: "assistant", content: fillTemplateText(character.first_mes, character, USER_NAME) },
   ];
   saveChat();
 }
@@ -236,16 +237,15 @@ function startNewChat() {
 // =====================================================================
 
 // ---------------------------------------------------------------------
-//  fillMacros and buildSystemMessage used to live here. They moved to
-//  prompt-builder.js so they could be TESTED: in here they read
+//  Building the system message used to live here. It moved to
+//  prompt-template.js so it could be TESTED: in here it read
 //  `character`, `USER_NAME` and `chatStyle` out of thin air, and a
 //  function that reaches outside itself can only be run by loading the
-//  whole app. Over there they take what they need as arguments, which
-//  is why the calls below look more long-winded than they used to.
+//  whole app. Over there it takes what it needs as arguments, which is
+//  why the calls below look more long-winded than they used to.
 //
-//  That file is worth reading. It also explains a real bug the move
-//  uncovered, in which a character whose name contained certain
-//  punctuation could corrupt her own system prompt.
+//  That file is worth reading. It's also where the SHAPE of the prompt
+//  is decided, which is now yours to change rather than ours.
 // ---------------------------------------------------------------------
 
 
@@ -1010,7 +1010,7 @@ function promptSizeSummary() {
 
   // And which part of the card, biggest first — the one you can act on.
   // [...array] copies it before sorting, because .sort() rearranges the
-  // array you give it, and that one came from prompt-builder.js.
+  // array you give it, and that one came from prompt-template.js.
   const parts = [...systemMessageParts(character, USER_NAME, chatStyle)]
     .map((part) => ({ label: part.label, tokens: estimateTokens(part.text) }))
     .sort((a, b) => b.tokens - a.tokens);
