@@ -57,12 +57,52 @@
 //  takes a moment, and JavaScript won't wait unless you tell it to.
 //  (We can use `await` at the top level of this file because Bun
 //  treats it as a "module." In older JavaScript you couldn't.)
-const config = await Bun.file("config.json").json();
+//
+//  WHY ALL THE CHECKING BELOW?
+//  ---------------------------
+//  config.json is deliberately NOT stored in git (see .gitignore),
+//  because it holds your API key. The upside is that your key can never
+//  be uploaded by accident. The downside is that a freshly downloaded
+//  copy of Tiny RP doesn't have a config.json at all, so the very first
+//  thing it would do is crash. An error that tells you what to do next
+//  is worth a few lines.
+//
+//  You can also keep more than one config (say, one per provider) and
+//  choose between them when you start the server:
+//      TINY_RP_CONFIG=mancer.config.json bun run start
+//  Give extra configs names ending in ".config.json": .gitignore hides
+//  those too, so a second key can't be uploaded by accident either.
+//  `process.env` holds ENVIRONMENT VARIABLES: settings handed to a
+//  program by whatever started it. `??` means "if that's missing, use
+//  this instead," so leaving it unset gives the normal config.json.
+const CONFIG_PATH = process.env.TINY_RP_CONFIG ?? "config.json";
+
+const configFile = Bun.file(CONFIG_PATH);
+
+if (!(await configFile.exists())) {
+  console.error(`Couldn't find ${CONFIG_PATH}.`);
+  console.error(`Make one by copying the example:`);
+  console.error(`    cp config.example.json ${CONFIG_PATH}`);
+  console.error(`then open it and fill in your API address, key, and model.`);
+  // process.exit(1) stops the program. The 1 means "something went
+  // wrong" (0 means "finished fine"). Other programs can read that
+  // number to find out whether we succeeded.
+  process.exit(1);
+}
+
+let config;
+try {
+  config = await configFile.json();
+} catch (error) {
+  console.error(`${CONFIG_PATH} isn't valid JSON: ${error.message}`);
+  console.error(`A stray comma or a missing quote is usually the cause.`);
+  process.exit(1);
+}
 
 // A tiny safety check. If you forgot to fill in your key, it's
 // kinder to say so now than to fail mysteriously later.
 if (!config.apiKey || config.apiKey.startsWith("PUT-")) {
-  console.warn("⚠  config.json still has the placeholder API key.");
+  console.warn(`⚠  ${CONFIG_PATH} still has the placeholder API key.`);
   console.warn("   The page will load, but generating replies will fail.");
 }
 
@@ -170,7 +210,34 @@ async function handleGenerate(request) {
   // The browser sent JSON in the "body" of the request.
   // `request.json()` reads it and turns it into an object.
   // We expect it to look like: { messages: [ ... ] }
-  const body = await request.json();
+  //
+  // This gets its OWN try/catch, because the body might not be valid
+  // JSON at all. An error thrown out here, outside of any catch, escapes
+  // the function entirely; Bun then answers with a big HTML error page
+  // (which even includes the folder this server is running from) instead
+  // of the { error: ... } shape app.js knows how to display. Handling it
+  // turns a mystery into a sentence.
+  let body;
+  try {
+    body = await request.json();
+  } catch (error) {
+    return Response.json(
+      { error: "That request body wasn't valid JSON." },
+      { status: 400 } // 400 = "you sent me something I can't use"
+    );
+  }
+
+  // Never trust the SHAPE of data that arrived over the network, even
+  // when you wrote the code that sent it. Checking here means a bug in
+  // app.js shows up as a clear message from our own server, instead of
+  // a confusing complaint from the provider (or a charge for a request
+  // that was never going to work).
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return Response.json(
+      { error: 'Expected a non-empty "messages" array.' },
+      { status: 400 }
+    );
+  }
 
   // `try { ... } catch (error) { ... }` means:
   // "Try to do this. If ANYTHING in here throws an error, jump to the

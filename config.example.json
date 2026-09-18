@@ -1,0 +1,8 @@
+{
+  "port": 8123,
+  "apiUrl": "https://openrouter.ai/api/v1/chat/completions",
+  "apiKey": "PUT-YOUR-KEY-HERE",
+  "model": "PUT-A-MODEL-NAME-HERE",
+  "maxTokens": 400,
+  "temperature": 0.9
+}

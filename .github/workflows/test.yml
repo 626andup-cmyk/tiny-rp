@@ -1,0 +1,35 @@
+# Runs `bun test` automatically on GitHub every time you push.
+#
+# This is "CI" (continuous integration): the same checks you run in
+# Termux, run again on someone else's computer. It catches the classic
+# "works on my machine" problem, where code depends on a file or a
+# setting that only exists where you wrote it.
+#
+# Note there's no API key here, and no config.json. The tests never need
+# one: tests/server.test.js writes its own throwaway config and points
+# the server at a fake provider. If a test ever fails here but passes at
+# home, that's the useful signal — it means something has crept in that
+# depends on your machine.
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Download the repository onto the machine running this job.
+      - uses: actions/checkout@v4
+
+      # Install Bun, the same thing you run locally.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # No install step: Tiny RP has no dependencies on purpose.
+      - name: Run tests
+        run: bun test

@@ -1,3 +1,10 @@
 # Files listed here are ignored by git, so they never get uploaded
 # to GitHub. config.json holds your API key, so it must stay private.
 config.json
+
+# Any extra configs you keep for other providers, e.g. mancer.config.json
+# (start the server with one using: TINY_RP_CONFIG=mancer.config.json bun run start)
+*.config.json
+
+# config.example.json is NOT ignored on purpose: it has no real key in
+# it, and it's what you copy to make your own config.json.
