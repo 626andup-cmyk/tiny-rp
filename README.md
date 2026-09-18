@@ -27,8 +27,10 @@ Your own messages get wrapped in `<cht>` tags automatically, so you never have t
 ```
 tiny-rp/
 ├── server.js            The back end. Serves the page and relays messages to the AI.
+├── fake-provider.js     A pretend AI for practising on, free and offline.
 ├── config.json          Your settings: API address, key, model. KEEP THIS PRIVATE.
 ├── config.example.json  A copy of the above with no key in it. Safe to share.
+├── config.practice.json Points at the fake provider instead of a real one.
 ├── package.json         Short names for commands: `bun run start`, `bun run test`.
 ├── .gitignore           Tells git never to upload config.json.
 ├── README.md            This file.
@@ -47,6 +49,7 @@ tiny-rp/
 │   ├── card-loader.test.js
 │   ├── prompt-budget.test.js
 │   ├── chat-backup.test.js
+│   ├── properties.test.js  Tests that invent their own examples.
 │   └── server.test.js   Starts the real server and talks to it.
 └── .github/workflows/   Runs the tests on GitHub after every push.
     └── test.yml
@@ -87,6 +90,38 @@ TINY_RP_CONFIG=mancer.config.json bun run start
 ```
 
 If something goes wrong, the error appears right in the chat, and the Termux window logs every request the browser makes. Watching that log while you click around is one of the best ways to learn what's going on.
+
+## Practice mode (no key, no internet, no money)
+
+Every real reply costs money and needs a connection. That's a bad deal when what you're doing is pressing Send forty times to see how a typing delay feels. So there's a pretend provider: it speaks the same language as OpenRouter, but makes the replies up locally.
+
+Open a second Termux session (swipe in from the left edge, then **New session**) and run:
+
+```
+bun run fake
+```
+
+Leave that running. Back in your first session:
+
+```
+bun run practice
+```
+
+Then use `http://localhost:8123` exactly as normal. Chat style, bubbles, regenerate, the memory line, backups — everything works. Only the intelligence is missing, and you don't need intelligence to test a typing delay.
+
+Two programs in two windows talking over a port isn't a workaround, by the way. It's how most software runs: your browser, the fake provider and the real server are three separate programs that only know each other by a port number.
+
+**Send these as messages to make it misbehave on purpose:**
+
+| you send | what happens | what it's for |
+| --- | --- | --- |
+| `/slow` | takes 6 seconds | watch the typing indicator |
+| `/error` | fails with a 500 | see how errors appear in the chat |
+| `/empty` | replies with nothing | see `(empty reply)` |
+| `/long` | a wall of text | fill the context and make the memory line appear |
+| `/bubbles` | lots of short `<cht>` bubbles | watch chat style reveal them one by one |
+
+Deliberately breaking things is the fastest way to find out what code does, so this gives you a button for it. The fake provider also prints every prompt it receives, with its size — watching that scroll past while you chat is the clearest possible view of the fact that **the whole conversation is sent again, every single time.**
 
 ## How one message travels through the app
 
@@ -139,7 +174,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 55 small automatic checks. Run them with:
+The `tests/` folder holds 68 automatic checks. Run them with:
 
 ```
 bun test
@@ -153,6 +188,12 @@ They come in two flavors, and the difference is worth knowing.
 
 - a **fake provider**: our own tiny server that answers the way OpenRouter would, which also lets the test check what our server *sent* (did it really attach the key?);
 - a **temporary config** in the system temp folder, so your real `config.json` is never read.
+
+**Property tests** (`properties`) don't contain any examples at all. Instead of "for this input, expect that output," they state a rule that has to hold for *every* input — "no matter what text you give `splitIntoBubbles`, no `<cht>` tag is ever left in the result" — and then the computer invents a few hundred horrible inputs and checks the rule against each one.
+
+This is worth trying on your own code, because examples only ever test the cases you thought of, and bugs live in the ones you didn't. Writing that exact rule found a real bug that had been in `chat-style.js` for three versions: a doubled opening tag like `<cht>in<cht>side</cht>` left a visible `<cht>` in the chat. No example test had thought to try it, because why would you? The computer doesn't need a reason.
+
+The file explains how to hunt for more (change one number and run it again).
 
 Get into the habit of running them after you change any of the helper files. If a test goes red, either you broke something, or you changed your mind about how it should work, in which case you update the test. Writing a new test *before* you add a feature ("I want this input to give that output") is a surprisingly relaxing way to program.
 
@@ -197,6 +238,10 @@ GitHub runs `bun test` by itself after every push (see `.github/workflows/test.y
 **Regression test.** A test that exists to stop a bug from coming back. It doesn't describe a feature; it pins down something that must stay impossible. The path-traversal test in `tests/server.test.js` is one. Write one every time you fix a real bug, and it can only ever bite you once.
 
 **CI (continuous integration).** Running your tests automatically on someone else's computer every time you push, to catch anything that secretly depended on yours.
+
+**Property (in testing).** A rule that must hold for every possible input, rather than a single example. "Saving then loading gives back what you started with" is a property. See `tests/properties.test.js`.
+
+**Seed.** The starting number for a random number generator. The same seed always produces the same "random" sequence, which is how a test can use random data and still fail identically every time.
 
 ## Exercises
 

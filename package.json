@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "start": "bun run server.js",
-    "test": "bun test"
+    "test": "bun test",
+    "fake": "bun run fake-provider.js",
+    "practice": "TINY_RP_CONFIG=config.practice.json bun run server.js"
   }
 }

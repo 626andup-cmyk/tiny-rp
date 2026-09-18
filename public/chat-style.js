@@ -93,7 +93,18 @@ function splitIntoBubbles(text) {
 
     if (isInsideTags) {
       // A tagged bubble stays whole, even if it has blank lines in it.
-      bubbles.push(piece);
+      //
+      // It still gets the stray-tag clean-up below, though, and here's
+      // why. The regex above is LAZY, so it stops at the FIRST closing
+      // tag. Give it a doubled opening tag:
+      //
+      //     <cht>in<cht>side</cht>
+      //
+      // and it captures "in<cht>side" — inner tag and all. Without this
+      // replace, that tag would appear as literal text in the chat,
+      // which is exactly what the tags exist to avoid. Models really do
+      // emit this; they lose track of which tags they've opened.
+      bubbles.push(piece.replace(/<\/?cht>/gi, ""));
     } else {
       // Untagged text: remove any stray, unmatched tags (models
       // sometimes forget to close one), then split on blank lines.

@@ -12,7 +12,13 @@ Everything Tiny RP remembers — every chat, the card you loaded, whether chat s
 
 The file format is the part worth reading. It would be easy to dump the `messages` array to a file and call it done; `chat-backup.js` explains why it says what format and version it is instead, and that's a lesson that applies to every file you'll ever design.
 
-As always, **no README exercises were solved.** Backing up isn't one of them. Three new exercises (19 to 21) were added, built on the new code.
+The other two additions are both about making it cheaper to learn.
+
+**Practice mode** exists because every real reply costs money and needs a connection, which is a bad deal when what you're doing is pressing Send forty times to see how a typing delay feels. Now there's a pretend provider that makes replies up locally, with commands to make it fail, stall, or send twenty bubbles on purpose. You can take the whole app apart on a bus with no signal and no credit.
+
+**Property-based tests** are in here because they're one of the highest-value ideas in testing and almost nobody gets taught them. Rather than writing examples, you state a rule that must hold for every input and let the computer invent the inputs. It earned its place immediately by finding a real bug that had survived three versions — see Fixed, below.
+
+As always, **no README exercises were solved.** Neither backing up nor practice mode is one of them. Three new exercises (19 to 21) were added, built on the new code.
 
 ### Added
 
@@ -23,7 +29,20 @@ As always, **no README exercises were solved.** Backing up isn't one of them. Th
 - **`public/chat-backup.js`**, all pure functions, plus 18 tests. Mostly tests of the *refusals*, because the dangerous case isn't a backup that fails to load, it's one that loads *almost* correctly over the top of a good chat.
   - It refuses: files that aren't JSON, JSON that isn't an object, JSON that isn't ours (a character card, say — also JSON, also has a name), backups from a **newer version** of Tiny RP, ones with no messages or no character, and ones where **any** message is damaged, not just the first.
   - Filenames are built from the character's name with everything that isn't a letter or digit turned into a dash, so a character called `../../etc/passwd` becomes `etc-passwd-chat-….json`.
-- There are now **55 tests**, up from 37.
+- **Practice mode**: `fake-provider.js`, a pretend AI that speaks the same OpenAI-compatible language as OpenRouter but makes the replies up locally. Free, instant, works with no key and no internet.
+  - `bun run fake` in one Termux session, `bun run practice` in another.
+  - It digs the character's name out of the system prompt, so the canned replies say "Wren almost smiles" rather than something generic.
+  - Five commands you can send to make it misbehave **on purpose**: `/slow` (6 seconds, to watch the typing indicator), `/error` (a 500, to see errors land in the chat), `/empty` (`(empty reply)`), `/long` (a wall of text, to make the memory line appear fast) and `/bubbles` (a pile of short `<cht>` bubbles). Breaking things deliberately is the quickest way to learn what code does, so now there's a button for it.
+  - It prints every prompt it receives with its size. Watching that scroll past while you chat is the clearest possible demonstration that the *whole conversation* is sent again every single time.
+- **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
+  - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
+- There are now **68 tests**, up from 37.
+
+### Fixed
+
+- **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
+
+  It was found by the property test above, which is exactly the point of writing one. No example test had tried a doubled opening tag, because it wouldn't occur to a person to try it. There's now a regression test with the fuzzer's own counterexample in it.
 
 ### Changed
 
@@ -39,10 +58,12 @@ As always, **no README exercises were solved.** Backing up isn't one of them. Th
 
 ### How it was tested
 
-- All **55 tests** pass.
+- All **68 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.
+- The property tests were run against **ten different random seeds** (about 40,000 generated inputs) after the tag fix. No further violations turned up. They were also checked against the *unfixed* `chat-style.js`, where the tag rule fails as it should — a property test that passes on the broken version is testing nothing, same as any other test.
+- **Practice mode was driven in a real browser**, 7 checks: a normal reply arrives using the character's actual name, `/error` shows the failure in the chat, `/empty` gives `(empty reply)`, `/bubbles` reveals bubbles one at a time under chat style, and a long practice chat makes the memory line appear. No uncaught errors throughout.
 
 ### Not tested yet
 

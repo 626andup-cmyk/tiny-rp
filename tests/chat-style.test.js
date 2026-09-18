@@ -91,6 +91,39 @@ test("leaves text alone if you already tagged it yourself", () => {
 });
 
 
+// ---- malformed tags ----------------------------------------------------
+//
+// Models lose track of which tags they've opened, so these aren't
+// hypothetical. The rule is simple: however mangled the tags are, a
+// <cht> must never end up as visible text in the chat.
+
+test("a doubled opening tag doesn't leave a tag in the bubble", () => {
+  // The splitting regex is lazy, so it stops at the first </cht> and
+  // captures "in<cht>side". This is a REGRESSION TEST: a fuzzer found
+  // this input, and the tag used to show up in the chat.
+  expect(splitIntoBubbles("<cht>in<cht>side</cht>")).toEqual(["inside"]);
+});
+
+test("nested tags don't leave a tag in the bubble", () => {
+  expect(splitIntoBubbles("<cht><cht>x</cht></cht>")).toEqual(["x"]);
+});
+
+test("no arrangement of tags survives into the output", () => {
+  const mangled = [
+    "<cht>a</cht><cht>in<cht>side</cht></cht>",
+    "<cht>unclosed",
+    "</cht>stray closer",
+    "<CHT>shouty<CHT>tags</CHT>",
+    "<cht><cht><cht>deep</cht>",
+  ];
+  for (const text of mangled) {
+    for (const bubble of splitIntoBubbles(text)) {
+      expect(bubble).not.toMatch(/<\/?cht>/i);
+    }
+  }
+});
+
+
 // ---- typingDelay -------------------------------------------------------
 
 test("longer bubbles take longer to type", () => {

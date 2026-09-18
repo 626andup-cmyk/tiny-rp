@@ -1,0 +1,8 @@
+{
+  "port": 8123,
+  "apiUrl": "http://localhost:8124/v1/chat/completions",
+  "apiKey": "no-key-needed",
+  "model": "fake-provider",
+  "maxTokens": 400,
+  "temperature": 0.9
+}
