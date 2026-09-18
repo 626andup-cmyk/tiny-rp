@@ -34,9 +34,10 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
   - It digs the character's name out of the system prompt, so the canned replies say "Wren almost smiles" rather than something generic.
   - Five commands you can send to make it misbehave **on purpose**: `/slow` (6 seconds, to watch the typing indicator), `/error` (a 500, to see errors land in the chat), `/empty` (`(empty reply)`), `/long` (a wall of text, to make the memory line appear fast) and `/bubbles` (a pile of short `<cht>` bubbles). Breaking things deliberately is the quickest way to learn what code does, so now there's a button for it.
   - It prints every prompt it receives with its size. Watching that scroll past while you chat is the clearest possible demonstration that the *whole conversation* is sent again every single time.
+- **17 tests for the prompt builder**, which had none before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
-- There are now **70 tests**, up from 37.
+- There are now **87 tests**, up from 37.
 
 ### Fixed
 
@@ -59,11 +60,38 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
   **The damaged chat is moved aside rather than deleted**, to `tiny-rp-chat:<name> (damaged)`, and the app tells you where it went. The first version of this fix said "the old data is still in your browser's storage" while quietly destroying it, because giving up on the chat makes `startNewChat()` save straight over it. Checking that claim instead of trusting it is the only reason this line is true.
 
+- **A character whose name contained certain punctuation could corrupt her own system prompt.** `fillMacros` replaced `{{char}}` with the name by passing it to `.replace()` as a string — and a few characters are magic inside a replacement string. `$&` means "the text that was matched", `` $` `` means "everything before the match", `$'` means "everything after it".
+
+  Those rules applied to the name, which came out of somebody else's character card. A character called ``Do$`t`` turned this:
+
+  ```
+  Hello {{char}}.      ->      Hello DoHello t.
+  ```
+
+  The start of the sentence appeared in the middle of her name. Nothing crashed; the prompt was just quietly wrong, in the one place you'd least want it to be.
+
+  Passing a **function** to `.replace()` instead of a string turns all of that off — whatever it returns is used exactly as written. The rule worth keeping: any time you replace text with a value you didn't write yourself, use the function form. There are five regression tests for this now, including one checking that an ordinary `$` in a name (`A$AP`, `$5 Steve`) still comes through untouched.
+
 - **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
 
   It was found by the property test above, which is exactly the point of writing one. No example test had tried a doubled opening tag, because it wouldn't occur to a person to try it. There's now a regression test with the fuzzer's own counterexample in it.
 
 ### Changed
+
+- **The prompt builder moved out of `app.js` into `public/prompt-builder.js`**, and `fillMacros` / `buildSystemMessage` now take what they need as arguments instead of reading `character`, `USER_NAME` and `chatStyle` out of the surrounding file.
+
+  It moved for one reason: it couldn't be tested where it was. `app.js` is 1,195 lines and has no automated tests at all, because it needs a browser, a page full of elements and a server to do anything. So the single most important code in the app — the bit that decides who the AI thinks it is — had zero tests, while the bubble splitter had twenty.
+
+  The change that fixed that is tiny:
+
+  ```
+  before:  function fillMacros(text)
+  after:   function fillMacros(text, characterName, userName)
+  ```
+
+  That's most of what people mean by "testable code". It isn't a testing technique you apply afterwards; it's a shape you give the function while writing it. A function that reaches outside itself can only be run by recreating everything outside it. One that takes arguments can be called with made-up values and checked.
+
+  The `$` bug above was found *while* writing those tests, which is the usual way round: making code testable and then testing it is how you find out what it actually does. Call sites in `app.js` are a little longer now, and say plainly what goes into a prompt.
 
 - **The top bar wraps properly on narrow phones.** Six buttons wouldn't fit beside the character's name on a 320px screen: they stacked five rows deep and ate 40% of the display. Below 26rem the name now takes its own line and the buttons get the full width, slightly tightened.
 
@@ -77,7 +105,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### How it was tested
 
-- All **70 tests** pass, in well under a second.
+- All **87 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.

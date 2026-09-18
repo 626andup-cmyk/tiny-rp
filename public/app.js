@@ -11,10 +11,19 @@
 //    5. In chat style, shows replies as separate bubbles that appear
 //       one by one, like someone typing.
 //
-//  It uses functions from two helper files that load before it:
+//  It uses functions from the helper files that load before it:
 //    chat-style.js     splitIntoBubbles, wrapInBubbleTags, typingDelay
 //    card-loader.js    readCardFile
 //    prompt-budget.js  fitToBudget, PROMPT_BUDGET_TOKENS
+//    prompt-builder.js fillMacros, buildSystemMessage
+//    chat-backup.js    buildBackup, readBackup, backupFilename,
+//                      isUsableMessage
+//
+//  Everything in those files is a PURE FUNCTION, which is why they all
+//  have tests and this file doesn't. That split is on purpose: the
+//  logic worth checking lives where it can be checked, and what's left
+//  in here is the part that genuinely needs a browser — elements,
+//  clicks, timers and state.
 //
 //  THE ONE BIG IDEA IN THIS FILE: "state" and "render"
 //  ---------------------------------------------------
@@ -218,7 +227,7 @@ function startNewChat() {
   chatChangeCount = chatChangeCount + 1;
 
   messages = [
-    { role: "assistant", content: fillMacros(character.first_mes) },
+    { role: "assistant", content: fillMacros(character.first_mes, character.name, USER_NAME) },
   ];
   saveChat();
 }
@@ -232,68 +241,17 @@ function startNewChat() {
 // =====================================================================
 
 // ---------------------------------------------------------------------
-//  fillMacros(text)
-//  Character cards use placeholders like {{char}} and {{user}}.
-//  This swaps them for the real names.
+//  fillMacros and buildSystemMessage used to live here. They moved to
+//  prompt-builder.js so they could be TESTED: in here they read
+//  `character`, `USER_NAME` and `chatStyle` out of thin air, and a
+//  function that reaches outside itself can only be run by loading the
+//  whole app. Over there they take what they need as arguments, which
+//  is why the calls below look more long-winded than they used to.
 //
-//  We use regular expressions with the `g` (global: replace them ALL)
-//  and `i` (ignore case, so {{Char}} works too) flags. Some very old
-//  cards use <BOT> and <USER> instead, so we handle those as well.
-//
-//  `text ?? ""` guards against a card that's missing a field:
-//  if `text` is undefined, we use an empty string instead.
+//  That file is worth reading. It also explains a real bug the move
+//  uncovered, in which a character whose name contained certain
+//  punctuation could corrupt her own system prompt.
 // ---------------------------------------------------------------------
-function fillMacros(text) {
-  return (text ?? "")
-    .replace(/{{char}}|<BOT>/gi, character.name)
-    .replace(/{{user}}|<USER>/gi, USER_NAME);
-}
-
-
-// ---------------------------------------------------------------------
-//  buildSystemMessage()
-//  Builds the "system" message: the part of the prompt that describes
-//  the character and the rules. It's the same every turn (unless you
-//  change characters or switch chat style).
-// ---------------------------------------------------------------------
-function buildSystemMessage() {
-
-  // Build the system message out of pieces of the character card.
-  // An array of lines joined with "\n" (newline) is an easy way to
-  // build a long block of text.
-  const lines = [
-    `You are ${character.name} in an ongoing roleplay with ${USER_NAME}.`,
-    `Write only ${character.name}'s replies. Never write ${USER_NAME}'s actions or dialogue.`,
-  ];
-
-  // In chat style, ask the model to format replies as bubbles.
-  // (Cards whose example messages already use <cht> tags will mostly
-  // do this anyway. Models copy what they see.)
-  if (chatStyle) {
-    lines.push(
-      "This conversation is happening over text messages. Write each reply as one or more short messages, wrapping each message in <cht></cht> tags."
-    );
-  }
-
-  lines.push(
-    "",
-    "Description:",
-    fillMacros(character.description),
-    "",
-    "Personality:",
-    fillMacros(character.personality),
-    "",
-    "Scenario:",
-    fillMacros(character.scenario),
-    "",
-    "Example of the writing style:",
-    // <START> is a divider SillyTavern-style cards use between
-    // examples. The AI doesn't need to see it, so we remove it.
-    fillMacros(character.mes_example).replaceAll("<START>", "").trim(),
-  );
-
-  return { role: "system", content: lines.join("\n") };
-}
 
 
 // ---------------------------------------------------------------------
@@ -310,7 +268,7 @@ function buildSystemMessage() {
 //  fitToBudget comes from prompt-budget.js.
 // ---------------------------------------------------------------------
 function planPrompt() {
-  const system = buildSystemMessage();
+  const system = buildSystemMessage(character, USER_NAME, chatStyle);
   const fit = fitToBudget(system, messages);
   return { system: system, firstIncluded: fit.firstIncluded, tokens: fit.tokens };
 }

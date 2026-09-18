@@ -143,12 +143,13 @@
     scripts ran first, the buttons and boxes wouldn't exist yet, and
     app.js wouldn't be able to find them.
 
-    The ORDER of the scripts matters too. The first four define helper
+    The ORDER of the scripts matters too. The first five define helper
     functions that app.js uses, so they have to load first.
   -->
   <script src="chat-style.js"></script>
   <script src="card-loader.js"></script>
   <script src="prompt-budget.js"></script>
+  <script src="prompt-builder.js"></script>
   <script src="chat-backup.js"></script>
   <script src="app.js"></script>
 </body>

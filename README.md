@@ -42,6 +42,7 @@ tiny-rp/
 │   ├── chat-style.js    Helpers that split replies into bubbles.
 │   ├── card-loader.js   Reads character cards out of .png and .json files.
 │   ├── prompt-budget.js Decides how much chat history fits in the prompt.
+│   ├── prompt-builder.js Turns a character card into the system message.
 │   ├── chat-backup.js   Saves a chat to a file, and reads one back.
 │   └── character.json   The default character card.
 ├── tests/               Automatic checks. Run them with `bun test`.
@@ -49,6 +50,7 @@ tiny-rp/
 │   ├── card-loader.test.js
 │   ├── prompt-budget.test.js
 │   ├── chat-backup.test.js
+│   ├── prompt-builder.test.js
 │   ├── properties.test.js  Tests that invent their own examples.
 │   └── server.test.js   Starts the real server and talks to it.
 └── .github/workflows/   Runs the tests on GitHub after every push.
@@ -57,7 +59,7 @@ tiny-rp/
 
 Note that `config.json` is **not** in the repository, on purpose: it holds your key, and `.gitignore` keeps it off GitHub. `config.example.json` is the one that ships, and it's what you copy to make your own.
 
-A suggested reading order: `index.html` first (shortest, sets the scene), then `app.js` (the main event), then `server.js`. After that, `prompt-budget.js` (short, and it explains the single most important limit in AI chat), then `chat-style.js` and its test file side by side: reading a function next to the examples that test it is one of the best ways to understand it. Save `card-loader.js` for when you're curious how files work at the byte level, and `chat-backup.js` for when you want to know how a file format is *designed* rather than read. `style.css` is for whenever you want to change how it looks.
+A suggested reading order: `index.html` first (shortest, sets the scene), then `app.js` (the main event), then `server.js`. After that, `prompt-budget.js` (short, and it explains the single most important limit in AI chat), then `prompt-builder.js` (the bit that decides who the AI thinks it is), then `chat-style.js` and its test file side by side: reading a function next to the examples that test it is one of the best ways to understand it. Save `card-loader.js` for when you're curious how files work at the byte level, and `chat-backup.js` for when you want to know how a file format is *designed* rather than read. `style.css` is for whenever you want to change how it looks.
 
 ## Setting it up
 
@@ -174,7 +176,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 70 automatic checks. Run them with:
+The `tests/` folder holds 87 automatic checks. Run them with:
 
 ```
 bun test
@@ -182,7 +184,7 @@ bun test
 
 They come in two flavors, and the difference is worth knowing.
 
-**Unit tests** (`chat-style`, `card-loader`, `prompt-budget`, `chat-backup`) check *pure functions*: give it an input, look at the output, nothing else involved. These are fast and easy to write, which is exactly why those four files were built as pure functions in the first place.
+**Unit tests** (`chat-style`, `card-loader`, `prompt-budget`, `chat-backup`, `prompt-builder`) check *pure functions*: give it an input, look at the output, nothing else involved. These are fast and easy to write, which is exactly why those five files were built as pure functions in the first place. `prompt-builder.js` is the newest of them, and it only became testable when it stopped reading values out of `app.js` and started taking them as arguments — a change worth understanding, because it's the difference between code you can check and code you can only run.
 
 **Integration tests** (`server`) check things that can't be reduced to an input and an output. `server.js` listens on a port, reads a config file, and calls an AI provider over the internet. So instead the test *starts the real server* and talks to it the way your browser would. It gets away without an API key using two tricks worth stealing:
 
