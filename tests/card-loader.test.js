@@ -90,6 +90,66 @@ test("explains when a PNG has no card inside", () => {
   expect(() => parsePngCard(plainPicture)).toThrow("doesn't have character data");
 });
 
+
+// ---------------------------------------------------------------------
+//  Cards that are broken in ways you'd actually meet.
+//
+//  All of these used to produce an error that pointed somewhere else —
+//  either "this PNG doesn't have character data inside it" when it
+//  demonstrably did, or a raw message from deep inside `atob` or
+//  `JSON.parse` about invalid characters and unterminated strings.
+//
+//  An error message is a user interface. If a real card of yours fails
+//  to load, the difference between these messages and the old ones is
+//  the difference between fixing it and giving up.
+// ---------------------------------------------------------------------
+
+// Build a chunk type we don't read, with a card-ish keyword in it.
+function makeUnreadablePng(type) {
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])];
+  // zTXt is: keyword, 0, compression method, then compressed bytes.
+  parts.push(makeChunk(type, new TextEncoder().encode("chara\0\0some-compressed-bytes")));
+  parts.push(makeChunk("IEND", new Uint8Array(0)));
+
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const png = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    png.set(part, offset);
+    offset += part.length;
+  }
+  return png.buffer;
+}
+
+test("says so when the card is in a compressed chunk it can't read", () => {
+  // A PNG optimiser run over a card can turn its tEXt into a zTXt. The
+  // data is still in there; we just can't get at it. Saying "no
+  // character data" would be a lie.
+  for (const type of ["zTXt", "iTXt"]) {
+    expect(() => parsePngCard(makeUnreadablePng(type))).toThrow("compressed chunk");
+  }
+});
+
+test("says the data is damaged when the base64 won't decode", () => {
+  const png = makePng({ chara: "!!!! not base64 at all !!!!" });
+  expect(() => parsePngCard(png)).toThrow("damaged");
+});
+
+test("says the file may be truncated when the JSON won't parse", () => {
+  // Valid base64 of text that isn't complete JSON — what a half-copied
+  // download looks like.
+  const halfJson = Buffer.from('{"data": {"name": "Wr').toString("base64");
+  const png = makePng({ chara: halfJson });
+  expect(() => parsePngCard(png)).toThrow("truncated");
+});
+
+test("copes with base64 wrapped across several lines", () => {
+  // Plenty of tools wrap base64 at 60 or 76 characters. The data is
+  // perfectly good; it just has newlines in the middle of it.
+  const encoded = encodeCard({ data: { name: "Wren" } }).replace(/(.{20})/g, "$1\n");
+  expect(parsePngCard(makePng({ chara: encoded })).data.name).toBe("Wren");
+});
+
 test("normalizeCard handles V2/V3 cards (fields inside 'data')", () => {
   const card = normalizeCard({ spec: "chara_card_v3", data: { name: "A", first_mes: "hi" } });
   expect(card.name).toBe("A");

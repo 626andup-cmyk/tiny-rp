@@ -176,7 +176,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 87 automatic checks. Run them with:
+The `tests/` folder holds 91 automatic checks. Run them with:
 
 ```
 bun test
@@ -293,3 +293,16 @@ When you finish number 12, you'll have built the core ideas of most of what you 
 21. Make Restore *merge* instead of replacing. If a backup starts with the same messages as the chat you have open, it's the same roleplay, and only the messages after the point where they stop matching are new. Add them and leave the rest alone. Harder than it sounds, worth writing tests for first, and it's the same problem version control solves for code.
 
 These three, in order, are a decent tour of what programming actually is: read a value you already have, extend a format without breaking the old one, and work out what changed between two lists.
+
+**One more, if you like bytes**
+
+22. Read compressed cards. PNG has three kinds of text chunk: `tEXt` (plain), `zTXt` (compressed) and `iTXt` (international). Cards are meant to use `tEXt` and nearly all do, but a PNG optimiser can rewrite one into a `zTXt` — and then `card-loader.js` spots it and admits it can't read it. Teach it to. A `zTXt` chunk is: the keyword, a zero byte, one byte saying which compression method, then zlib-deflated data. Browsers can inflate that without any library:
+
+    ```js
+    const stream = new Blob([compressedBytes])
+      .stream()
+      .pipeThrough(new DecompressionStream("deflate"));
+    const text = await new Response(stream).text();
+    ```
+
+    The catch is that this is `async` and `parsePngCard` isn't, so you'll have to decide whether to make it async all the way up (and what that does to its tests). That decision — one awkward `await` rippling outward through everything that calls it — is a real and very common design problem, and meeting it in fifty lines of your own code is the cheapest way to understand it.

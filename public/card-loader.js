@@ -86,6 +86,18 @@ function parsePngCard(buffer) {
   // Collect every text chunk we find, by keyword.
   const found = {};
 
+  // PNG has three kinds of text chunk: tEXt (plain), zTXt (compressed)
+  // and iTXt (international, optionally compressed). Cards are supposed
+  // to use tEXt, and nearly all do — but a PNG optimiser run over a card
+  // can rewrite it into a zTXt to save a few hundred bytes, and then the
+  // data is still in there while being unreadable to us.
+  //
+  // We can't decompress those without shipping a lot more code, but we
+  // can NOTICE them. That's the difference between "this PNG doesn't
+  // have character data inside it", which would be a lie, and an error
+  // that tells you what's actually wrong.
+  const unreadableChunks = [];
+
   // Start reading right after the 8-byte signature.
   let offset = 8;
 
@@ -108,6 +120,19 @@ function parsePngCard(buffer) {
       found[keyword.toLowerCase()] = text;
     }
 
+    // Both of these start with a keyword and a zero byte, same as tEXt,
+    // so we can read the keyword even though we can't read the payload.
+    if (type === "zTXt" || type === "iTXt") {
+      const data = bytes.subarray(dataStart, dataEnd);
+      const zero = data.indexOf(0);
+      if (zero !== -1) {
+        const keyword = latin1.decode(data.subarray(0, zero)).toLowerCase();
+        if (keyword === "ccv3" || keyword === "chara") {
+          unreadableChunks.push(type);
+        }
+      }
+    }
+
     if (type === "IEND") {
       break; // "image end": nothing more to read
     }
@@ -118,11 +143,38 @@ function parsePngCard(buffer) {
 
   // Prefer the newer V3 data if both are present.
   const encoded = found["ccv3"] ?? found["chara"];
+
   if (!encoded) {
+    if (unreadableChunks.length > 0) {
+      throw new Error(
+        `This card's data is in a compressed chunk (${unreadableChunks[0]}), and ` +
+        `Tiny RP can only read plain tEXt ones. Re-exporting the card from the ` +
+        `app you made it in usually fixes this.`
+      );
+    }
     throw new Error("This PNG doesn't have character data inside it.");
   }
 
-  return JSON.parse(decodeBase64Utf8(encoded));
+  // The last two steps each have their own way of going wrong, and the
+  // built-in errors for both are unhelpful: atob says "The string
+  // contains invalid characters" and JSON.parse says "Unterminated
+  // string", neither of which tells you it's the card that's damaged.
+  // Catching them here costs six lines and turns "what?" into "ah."
+  let json;
+  try {
+    json = decodeBase64Utf8(encoded);
+  } catch (error) {
+    throw new Error("This card's hidden data is damaged and couldn't be decoded.");
+  }
+
+  try {
+    return JSON.parse(json);
+  } catch (error) {
+    throw new Error(
+      "This card's hidden data isn't valid JSON. The file may have been " +
+      "truncated — try downloading it again."
+    );
+  }
 }
 
 

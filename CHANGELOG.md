@@ -18,7 +18,7 @@ The other two additions are both about making it cheaper to learn.
 
 **Property-based tests** are in here because they're one of the highest-value ideas in testing and almost nobody gets taught them. Rather than writing examples, you state a rule that must hold for every input and let the computer invent the inputs. It earned its place immediately by finding a real bug that had survived three versions — see Fixed, below.
 
-As always, **no README exercises were solved.** Neither backing up nor practice mode is one of them. Three new exercises (19 to 21) were added, built on the new code.
+As always, **no README exercises were solved.** Neither backing up nor practice mode is one of them. Four new exercises (19 to 22) were added, built on the new code.
 
 ### Added
 
@@ -37,7 +37,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 - **17 tests for the prompt builder**, which had none before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
-- There are now **87 tests**, up from 37.
+- There are now **91 tests**, up from 37.
 
 ### Fixed
 
@@ -72,6 +72,14 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
   Passing a **function** to `.replace()` instead of a string turns all of that off — whatever it returns is used exactly as written. The rule worth keeping: any time you replace text with a value you didn't write yourself, use the function form. There are five regression tests for this now, including one checking that an ordinary `$` in a name (`A$AP`, `$5 Steve`) still comes through untouched.
 
+- **Three card-loading errors pointed at the wrong thing.** The loader itself turned out to be sturdier than expected — fourteen realistic card shapes were thrown at it, including base64 wrapped across lines, text chunks placed after the image data, truncated files and a chunk lying about its own length, and it handled or refused all of them correctly. What was wrong was what it *said*:
+
+  - A card whose data sits in a compressed `zTXt` or `iTXt` chunk got "This PNG doesn't have character data inside it", which is a flat lie — the data is right there, just compressed. (A PNG optimiser run over a card can do this.) It now says which chunk it found and that re-exporting usually fixes it.
+  - Base64 that wouldn't decode produced `atob`'s own "The string contains invalid characters."
+  - A truncated card produced `JSON.parse`'s "Unterminated string".
+
+  None of those tell you it's the card that's broken. An error message is a user interface, and if a real card of yours won't load, the difference between these messages and the old ones is the difference between fixing it and giving up. Exercise 22 is now teaching the loader to read the compressed ones.
+
 - **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
 
   It was found by the property test above, which is exactly the point of writing one. No example test had tried a doubled opening tag, because it wouldn't occur to a person to try it. There's now a regression test with the fuzzer's own counterexample in it.
@@ -105,7 +113,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### How it was tested
 
-- All **87 tests** pass, in well under a second.
+- All **91 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.
