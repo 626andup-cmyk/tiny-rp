@@ -36,7 +36,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
   - It prints every prompt it receives with its size. Watching that scroll past while you chat is the clearest possible demonstration that the *whole conversation* is sent again every single time.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
-- There are now **68 tests**, up from 37.
+- There are now **70 tests**, up from 37.
 
 ### Fixed
 
@@ -50,6 +50,14 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
   The cause is that `generate()` pushed its result into whatever `messages` happened to be by the time the reply came back, with no check that it was still the same conversation. The fix is the standard one: note which chat the request was *for*, and when the answer arrives, check that's still the chat you're in. If it isn't, drop the answer — there's nowhere correct to put it.
 
   It's worth reading the comment in `generate()` even if you never touch this code, because the shape of the problem is everywhere in async programming: **a slow answer can outlive the question.** Search-as-you-type, loading a page you've already navigated away from, any request you can cancel by clicking something else — all the same bug wearing different clothes.
+
+- **One bad message in storage killed the whole app, permanently.** `loadChat` accepted anything that was a non-empty array. Hand `render()` a message whose `content` is a number and `splitIntoBubbles` calls `.split()` on it, which throws, which takes the page down — for a chat you now can't reach to delete. Every reload did it again. The only way out was knowing to clear site data from the developer console.
+
+  This matters more here than in most projects, because this one's whole purpose is that you'll be editing it. A half-finished exercise that writes the wrong shape into storage is the likeliest cause, and "your app is bricked and the error blames the wrong file" is a miserable place for a lesson to end. (The error really did blame the wrong file: it read `Couldn't load character.json: text.split is not a function`, because the failure surfaced in the startup handler added in version 4. `character.json` was fine.)
+
+  Saved chats are now checked the same way backup files are — literally the same function, `isUsableMessage`, exported from `chat-backup.js` and used by both. Storage is outside data in exactly the way a file is. A damaged saved character is ignored too, since a character with no name can't even name its own save slot.
+
+  **The damaged chat is moved aside rather than deleted**, to `tiny-rp-chat:<name> (damaged)`, and the app tells you where it went. The first version of this fix said "the old data is still in your browser's storage" while quietly destroying it, because giving up on the chat makes `startNewChat()` save straight over it. Checking that claim instead of trusting it is the only reason this line is true.
 
 - **A `<cht>` tag could show up as visible text in the chat.** The splitting regex is lazy, so it stops at the first closing tag: given `<cht>in<cht>side</cht>` it captures `in<cht>side`, inner tag and all. The untagged branch of `splitIntoBubbles` stripped stray tags; the tagged branch didn't. Models really do open the same tag twice, and this had been there since version 2.
 
@@ -69,13 +77,14 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### How it was tested
 
-- All **68 tests** pass, in well under a second.
+- All **70 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.
 - The property tests were run against **ten different random seeds** (about 40,000 generated inputs) after the tag fix. No further violations turned up. They were also checked against the *unfixed* `chat-style.js`, where the tag rule fails as it should — a property test that passes on the broken version is testing nothing, same as any other test.
 - **The app was chaos tested.** Two kinds:
   - *Targeted*: start a generation against a deliberately slow provider, then press New chat or switch character while it's in the air, and check where the reply ends up. That's what caught the stale-reply bug, in both its forms, including the copy written to storage.
+  - *Storage*: nine kinds of corrupted saved data (a message with no content, one whose content is a number, a null message, a bare string, a good message followed by a broken one, an array of numbers, and three malformed saved characters). Every one of them used to leave the app dead with Send disabled. All nine now start a usable fresh chat, and the damaged copy is verified to still be in storage afterwards.
   - *Random*: 300 randomly chosen actions — send, delete, regenerate, toggle chat style, tap the typing indicator, new chat, redraw — fired in a deterministic random order, checking after **every single one** that `messages` still holds only valid messages, that any in-progress reveal still points at a message that exists, and that the screen never shows more messages than exist. No violations, and no uncaught errors. The state machine is sound; the bug was purely in the async gap.
 - **Practice mode was driven in a real browser**, 7 checks: a normal reply arrives using the character's actual name, `/error` shows the failure in the chat, `/empty` gives `(empty reply)`, `/bubbles` reveals bubbles one at a time under chat style, and a long practice chat makes the memory line appear. No uncaught errors throughout.
 

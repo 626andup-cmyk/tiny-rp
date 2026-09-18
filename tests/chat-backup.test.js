@@ -21,6 +21,7 @@ const {
   buildBackup,
   readBackup,
   backupFilename,
+  isUsableMessage,
   BACKUP_VERSION,
 } = require("../public/chat-backup.js");
 
@@ -135,6 +136,34 @@ test("refuses messages with a role it doesn't understand", () => {
 
 test("refuses a message that is null", () => {
   expect(() => readBackup(backupText({ messages: [null] }))).toThrow("message number 1");
+});
+
+
+// ---------------------------------------------------------------------
+//  isUsableMessage
+//  app.js uses this on localStorage as well, so it's worth its own
+//  tests rather than only being checked through readBackup. A saved
+//  chat containing any of the rejects below used to kill the page.
+// ---------------------------------------------------------------------
+
+test("isUsableMessage accepts the two real message shapes", () => {
+  expect(isUsableMessage({ role: "user", content: "hi" })).toBe(true);
+  expect(isUsableMessage({ role: "assistant", content: "" })).toBe(true);
+});
+
+test("isUsableMessage rejects anything render() would choke on", () => {
+  const rejects = [
+    null, undefined, 42, "a string", [],
+    {},                                     // no role, no content
+    { role: "user" },                       // content missing
+    { role: "user", content: 42 },          // content not a string
+    { role: "user", content: null },
+    { role: "system", content: "hi" },      // not a chat role
+    { role: "narrator", content: "hi" },
+  ];
+  for (const reject of rejects) {
+    expect(isUsableMessage(reject)).toBe(false);
+  }
 });
 
 

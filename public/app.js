@@ -1022,15 +1022,51 @@ function saveChat() {
 }
 
 // Returns the saved array, or null if there isn't a usable one.
+//
+//  Be as suspicious here as chat-backup.js is about files. Saved data is
+//  outside data: you didn't write it this run, and something else might
+//  have. A half-finished exercise that writes the wrong shape into
+//  storage is the likeliest cause, and this project actively encourages
+//  half-finished experiments.
+//
+//  Getting this wrong is nastier than it sounds. One message whose
+//  `content` isn't a string makes render() throw, which leaves the page
+//  dead — for a chat you now can't reach to delete. Refusing it here
+//  costs one line and means the worst case is "you get a fresh chat."
 function loadChat() {
   try {
     const text = localStorage.getItem(storageKey());
     if (text === null) {
       return null; // nothing saved yet
     }
+
     const saved = JSON.parse(text);
-    // Only accept it if it's a non-empty array.
-    return Array.isArray(saved) && saved.length > 0 ? saved : null;
+    if (!Array.isArray(saved) || saved.length === 0) {
+      return null;
+    }
+
+    // isUsableMessage comes from chat-backup.js, which already had to
+    // decide what a valid message looks like. One answer, not two.
+    if (!saved.every(isUsableMessage)) {
+      // Move the damaged text aside BEFORE giving up on it. Returning
+      // null here makes setCharacter call startNewChat(), which saves
+      // immediately — straight over the very data we're complaining
+      // about. (That's not a guess: the first version of this said "the
+      // old data is still in your storage" while quietly destroying it.)
+      //
+      // Data you don't understand is still data. Park it somewhere
+      // instead of deleting it, and say where you put it.
+      const rescueKey = storageKey() + " (damaged)";
+      localStorage.setItem(rescueKey, text);
+
+      lastError =
+        `That character's saved chat was damaged, so this is a fresh one. ` +
+        `The old data was moved aside under "${rescueKey}" in your browser's storage.`;
+      console.warn("Damaged chat moved to", rescueKey);
+      return null;
+    }
+
+    return saved;
   } catch (error) {
     console.warn("Couldn't load chat:", error);
     return null;
@@ -1049,7 +1085,21 @@ function saveCharacter(newCharacter) {
 function loadSavedCharacter() {
   try {
     const text = localStorage.getItem(SAVED_CHARACTER_KEY);
-    return text === null ? null : JSON.parse(text);
+    if (text === null) {
+      return null;
+    }
+
+    const saved = JSON.parse(text);
+
+    // A character with no name can't even name its own save slot (see
+    // storageKey), so every chat would pile into "tiny-rp-chat:undefined"
+    // together. Treat it as nothing and fall back to the default card.
+    if (saved === null || typeof saved !== "object" || !saved.name) {
+      console.warn("Ignoring a damaged saved character.");
+      return null;
+    }
+
+    return saved;
   } catch (error) {
     console.warn("Couldn't load saved character:", error);
     return null;

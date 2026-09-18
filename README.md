@@ -174,7 +174,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 68 automatic checks. Run them with:
+The `tests/` folder holds 70 automatic checks. Run them with:
 
 ```
 bun test

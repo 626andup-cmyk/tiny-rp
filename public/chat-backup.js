@@ -68,6 +68,32 @@ function buildBackup(character, messages) {
 
 
 // ---------------------------------------------------------------------
+//  isUsableMessage(message)
+//  Does this look like a chat message the rest of the app can cope with?
+//
+//  This lives next to the backup reader, but app.js uses it on
+//  localStorage too. That's deliberate. Data loaded from storage is
+//  OUTSIDE DATA in exactly the same way a file is: you didn't write it
+//  this run, you don't know what wrote it, and it might have been
+//  written by a half-finished experiment. One definition of "a
+//  message", written once and tested once, beats two that drift apart.
+//
+//  It matters more than it looks. Hand render() a message whose
+//  `content` is a number and splitIntoBubbles calls .split() on it,
+//  which throws, which takes the whole page down — for a chat you can
+//  no longer reach to delete.
+// ---------------------------------------------------------------------
+function isUsableMessage(message) {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    (message.role === "user" || message.role === "assistant") &&
+    typeof message.content === "string"
+  );
+}
+
+
+// ---------------------------------------------------------------------
 //  readBackup(text)
 //  Takes the TEXT of a backup file and returns { character, messages }.
 //  Throws an Error with a readable explanation if it can't.
@@ -117,13 +143,7 @@ function readBackup(text) {
   //
   // .entries() gives us the position too, so the error can point at it.
   for (const [position, message] of data.messages.entries()) {
-    const looksRight =
-      message !== null &&
-      typeof message === "object" &&
-      (message.role === "user" || message.role === "assistant") &&
-      typeof message.content === "string";
-
-    if (!looksRight) {
+    if (!isUsableMessage(message)) {
       throw new Error(`message number ${position + 1} is damaged.`);
     }
   }
@@ -176,6 +196,7 @@ if (typeof module !== "undefined") {
     buildBackup,
     readBackup,
     backupFilename,
+    isUsableMessage,
     BACKUP_FORMAT,
     BACKUP_VERSION,
   };
