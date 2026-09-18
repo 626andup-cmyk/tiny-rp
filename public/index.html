@@ -86,6 +86,7 @@
       <button type="button" id="chat-style-button" aria-pressed="false" title="Show replies as separate text bubbles">Chat style: off</button>
       <button type="button" id="load-card-button" title="Open a .png or .json character card">Load card</button>
       <button type="button" id="show-prompt-button" title="See exactly what gets sent to the AI">Show prompt</button>
+      <button type="button" id="blocks-button" title="Change the shape of the system prompt">Blocks</button>
       <button type="button" id="back-up-button" title="Save this chat to a file you can keep">Back up</button>
       <button type="button" id="restore-button" title="Load a chat back from a backup file">Restore</button>
       <button type="button" id="new-chat-button" title="Erase this chat and start over">New chat</button>
@@ -121,6 +122,41 @@
     exactly as written, which is perfect for showing JSON.
   -->
   <pre id="prompt-viewer" hidden></pre>
+
+  <!--
+    The prompt block editor. Hidden until you press "Blocks".
+
+    Almost everything in here is built by app.js rather than written
+    out below, because the number of blocks changes. The bits that are
+    always there — the heading, the buttons, the preview — live here;
+    the list itself is filled in by renderTemplateEditor().
+
+    <section> is another semantic tag, like <header>: a plain box whose
+    name tells you it's a distinct part of the page.
+  -->
+  <section id="template-editor" hidden>
+    <h2>Prompt blocks</h2>
+
+    <p class="hint">
+      These become the system prompt, in this order. Use
+      <code>{{char}}</code>, <code>{{user}}</code>,
+      <code>{{description}}</code>, <code>{{personality}}</code>,
+      <code>{{scenario}}</code> and <code>{{examples}}</code> to drop in
+      parts of the card. A block whose card fields are all empty is left
+      out. Write plain sentences instead of labels if you'd rather the
+      model wrote plain sentences back.
+    </p>
+
+    <div id="block-list"></div>
+
+    <div class="editor-actions">
+      <button type="button" id="add-block-button">Add block</button>
+      <button type="button" id="reset-template-button">Reset to default</button>
+    </div>
+
+    <h3>What the AI will see</h3>
+    <pre id="template-preview"></pre>
+  </section>
 
   <!-- The bottom area where you type. -->
   <footer class="input-bar">

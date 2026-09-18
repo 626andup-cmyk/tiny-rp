@@ -64,6 +64,7 @@ const DOUBLE_TAP_WINDOW_MS = 350;
 // Names for the things we save in the browser's localStorage.
 const SAVED_CHARACTER_KEY = "tiny-rp-character";
 const CHAT_STYLE_KEY = "tiny-rp-chat-style";
+const TEMPLATE_KEY = "tiny-rp-template";
 
 
 // ---------------------------------------------------------------------
@@ -100,6 +101,12 @@ let reveal = null;
 // When the typing indicator was last tapped (for double-tap detection).
 let lastTapTime = 0;
 
+// The list of blocks that become the system prompt. Yours to rearrange;
+// see prompt-template.js for what a block is, and the Blocks button for
+// editing them. Falls back to the default, which is exactly what Tiny RP
+// did before any of this was editable.
+let template = loadTemplate();
+
 // How many times we've swapped the whole chat out from under ourselves:
 // pressed New chat, loaded a card, restored a backup. It only ever goes
 // up, and the number itself means nothing. What matters is whether it
@@ -126,6 +133,12 @@ const cardFileInput   = document.getElementById("card-file-input");
 const backUpButton    = document.getElementById("back-up-button");
 const restoreButton   = document.getElementById("restore-button");
 const backupFileInput = document.getElementById("backup-file-input");
+const blocksButton    = document.getElementById("blocks-button");
+const templateEditor  = document.getElementById("template-editor");
+const blockList       = document.getElementById("block-list");
+const addBlockButton  = document.getElementById("add-block-button");
+const resetTemplateButton = document.getElementById("reset-template-button");
+const templatePreview = document.getElementById("template-preview");
 
 
 // =====================================================================
@@ -263,7 +276,7 @@ function startNewChat() {
 //  fitToBudget comes from prompt-budget.js.
 // ---------------------------------------------------------------------
 function planPrompt() {
-  const system = buildSystemMessage(character, USER_NAME, chatStyle);
+  const system = buildSystemMessage(character, USER_NAME, chatStyle, template);
   const fit = fitToBudget(system, messages);
   return { system: system, firstIncluded: fit.firstIncluded, tokens: fit.tokens };
 }
@@ -1011,7 +1024,7 @@ function promptSizeSummary() {
   // And which part of the card, biggest first — the one you can act on.
   // [...array] copies it before sorting, because .sort() rearranges the
   // array you give it, and that one came from prompt-template.js.
-  const parts = [...systemMessageParts(character, USER_NAME, chatStyle)]
+  const parts = [...systemMessageParts(character, USER_NAME, chatStyle, template)]
     .map((part) => ({ label: part.label, tokens: estimateTokens(part.text) }))
     .sort((a, b) => b.tokens - a.tokens);
 
@@ -1046,6 +1059,210 @@ function costLine(label, tokens, total) {
     (share * 100).toFixed(0).padStart(5) + "%  " +
     "█".repeat(filled) + "·".repeat(16 - filled)
   );
+}
+
+
+// =====================================================================
+//  THE PROMPT BLOCK EDITOR
+//  Lets you change the SHAPE of the system prompt, not just its
+//  contents. See the top of prompt-template.js for why that matters.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+//  renderTemplateEditor()
+//  Draws one row per block. Called when the list CHANGES — a block
+//  added, removed, moved or switched off — and not while you type.
+//
+//  THAT DISTINCTION IS THE WHOLE TRICK. Rebuilding the list replaces
+//  every element in it, including the textarea you're typing into, and
+//  the new one isn't focused and has no cursor position. Redraw on
+//  every keystroke and the box drops your cursor after one letter.
+//
+//  So typing updates the DATA and the PREVIEW, and deliberately leaves
+//  the list alone. Everything else redraws. It's the one place in this
+//  app where "just redraw everything" is the wrong answer, and it's
+//  worth knowing why: the DOM is holding state of its own (what's
+//  focused, where the cursor is) that our `template` array doesn't
+//  describe, so wiping it throws that state away.
+// ---------------------------------------------------------------------
+function renderTemplateEditor() {
+  blockList.replaceChildren();
+
+  template.forEach((block, index) => {
+    const row = document.createElement("div");
+    row.className = "block-row";
+
+    // --- the top line: on/off, name, and the move/delete buttons ---
+    const head = document.createElement("div");
+    head.className = "block-head";
+
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = block.enabled;
+    toggle.id = "block-toggle-" + index;
+    toggle.addEventListener("change", () => {
+      block.enabled = toggle.checked;
+      saveTemplate();
+      renderTemplateEditor();
+      refreshPrompt();
+    });
+
+    // A real <label> tied to the checkbox, so tapping the name toggles
+    // it too. That's a much bigger target than the box itself, which
+    // matters a lot on a phone.
+    const name = document.createElement("label");
+    name.htmlFor = toggle.id;
+    name.className = "block-name";
+    name.textContent = block.label;
+
+    head.append(toggle, name);
+
+    // Moving a block up or down is what reorders the prompt.
+    head.append(
+      createButton("↑", () => moveBlock(index, -1)),
+      createButton("↓", () => moveBlock(index, 1)),
+      createButton("✕", () => removeBlock(index))
+    );
+
+    row.append(head);
+
+    // --- the text itself ---
+    const text = document.createElement("textarea");
+    text.className = "block-text";
+    text.rows = 3;
+    text.value = block.text;
+    text.spellcheck = false;
+    text.setAttribute("aria-label", block.label + " text");
+
+    text.addEventListener("input", () => {
+      block.text = text.value;
+      saveTemplate();
+      refreshPrompt(); // NOT renderTemplateEditor — see the note above
+    });
+
+    row.append(text);
+
+    // Say which card fields this block uses, and which of them are
+    // empty — because an empty one is why a block vanishes from the
+    // preview, and that's confusing without an explanation.
+    const used = macrosUsedIn(block.text);
+    if (used.length > 0 && character !== null) {
+      const fields = cardFields(character);
+      const empty = used.filter((field) => fields[field].trim() === "");
+
+      const note = document.createElement("p");
+      note.className = "block-note";
+      note.textContent =
+        empty.length === used.length
+          ? `Left out: ${listOut(empty)} ${empty.length === 1 ? "is" : "are"} empty on this card.`
+          : `Uses ${listOut(used)}.`;
+      row.append(note);
+    }
+
+    if (block.chatStyleOnly) {
+      const note = document.createElement("p");
+      note.className = "block-note";
+      note.textContent = "Only used when chat style is on.";
+      row.append(note);
+    }
+
+    blockList.append(row);
+  });
+}
+
+
+// A tiny grammar helper: ["a"] → "a", ["a","b"] → "a and b",
+// ["a","b","c"] → "a, b and c".
+function listOut(items) {
+  if (items.length <= 1) {
+    return items.join("");
+  }
+  return items.slice(0, -1).join(", ") + " and " + items.at(-1);
+}
+
+
+// ---------------------------------------------------------------------
+//  moveBlock / removeBlock / addBlock / resetTemplate
+//  The four ways the list itself changes. Each one edits `template`,
+//  saves, and redraws — state and render, same as the chat.
+// ---------------------------------------------------------------------
+function moveBlock(index, direction) {
+  const to = index + direction;
+  if (to < 0 || to >= template.length) {
+    return; // already at the end; nothing to do
+  }
+
+  // Swap the two entries. The [a, b] = [b, a] trick swaps without
+  // needing a temporary variable.
+  [template[index], template[to]] = [template[to], template[index]];
+
+  saveTemplate();
+  renderTemplateEditor();
+  refreshPrompt();
+}
+
+function removeBlock(index) {
+  if (!confirm(`Remove the "${template[index].label}" block?`)) {
+    return;
+  }
+  template.splice(index, 1);
+  saveTemplate();
+  renderTemplateEditor();
+  refreshPrompt();
+}
+
+function addBlock() {
+  const label = prompt("What should this block be called?", "New block");
+  if (label === null || label.trim() === "") {
+    return;
+  }
+
+  template.push({
+    // Date.now() is a quick way to get an id nothing else is using.
+    id: "custom-" + Date.now(),
+    label: label.trim(),
+    enabled: true,
+    text: "",
+  });
+
+  saveTemplate();
+  renderTemplateEditor();
+  refreshPrompt();
+}
+
+function resetTemplate() {
+  if (!confirm("Put the blocks back exactly as they started?")) {
+    return;
+  }
+  template = defaultTemplate();
+  saveTemplate();
+  renderTemplateEditor();
+  refreshPrompt();
+}
+
+
+// ---------------------------------------------------------------------
+//  refreshPrompt()
+//  Updates everything that shows the prompt: the live preview in the
+//  editor, and the raw viewer if it happens to be open.
+//
+//  Being able to watch the prompt change as you type IS the feature.
+//  Formatting affects how a model writes, and you can't judge that
+//  from a settings screen that hides the result.
+// ---------------------------------------------------------------------
+function refreshPrompt() {
+  if (!templateEditor.hidden && character !== null) {
+    const system = buildSystemMessage(character, USER_NAME, chatStyle, template);
+    const tokens = estimateTokens(system.content);
+
+    templatePreview.textContent =
+      `About ${tokens.toLocaleString()} tokens, every single turn.\n\n` +
+      (system.content.trim() === "" ? "(nothing — every block is empty or off)" : system.content);
+  }
+
+  if (!promptViewer.hidden) {
+    updatePromptViewer();
+  }
 }
 
 
@@ -1158,6 +1375,43 @@ function loadSavedCharacter() {
   }
 }
 
+// The prompt blocks. Saved whenever you change one.
+function saveTemplate() {
+  try {
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(template));
+  } catch (error) {
+    console.warn("Couldn't save the prompt blocks:", error);
+  }
+}
+
+// Returns a usable template, always. A damaged one falls back to the
+// default rather than taking the app down — isUsableTemplate is in
+// prompt-template.js, and it's the same lesson as loadChat above:
+// saved data is outside data, so check it at the edge.
+//
+// This one matters more than most, because a broken template breaks
+// EVERY generation, not just one chat, and the editor that would let
+// you fix it is drawn from the same broken data.
+function loadTemplate() {
+  try {
+    const text = localStorage.getItem(TEMPLATE_KEY);
+    if (text === null) {
+      return defaultTemplate();
+    }
+
+    const saved = JSON.parse(text);
+    if (!isUsableTemplate(saved)) {
+      console.warn("Ignoring damaged prompt blocks; using the default.");
+      return defaultTemplate();
+    }
+
+    return saved;
+  } catch (error) {
+    console.warn("Couldn't load the prompt blocks:", error);
+    return defaultTemplate();
+  }
+}
+
 // Tiny settings, stored as plain strings.
 function saveSetting(key, value) {
   try {
@@ -1221,6 +1475,24 @@ chatStyleButton.addEventListener("click", toggleChatStyle);
 // usual trick.)
 loadCardButton.addEventListener("click", () => cardFileInput.click());
 cardFileInput.addEventListener("change", handleCardFile);
+
+// The prompt block editor. Opening it draws the list and the preview;
+// after that, only changes redraw anything.
+blocksButton.addEventListener("click", () => {
+  templateEditor.hidden = !templateEditor.hidden;
+  blocksButton.textContent = templateEditor.hidden ? "Blocks" : "Hide blocks";
+
+  // The chat gets out of the way while you're editing; see style.css.
+  document.body.classList.toggle("editing-blocks", !templateEditor.hidden);
+
+  if (!templateEditor.hidden) {
+    renderTemplateEditor();
+    refreshPrompt();
+  }
+});
+
+addBlockButton.addEventListener("click", addBlock);
+resetTemplateButton.addEventListener("click", resetTemplate);
 
 // Backups. Same trick as above: the visible button clicks the hidden
 // file picker.
