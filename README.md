@@ -120,6 +120,17 @@ If you understand those six steps, you understand the skeleton of every AI chat 
 
 **State and render.** The `messages` array is the truth. The screen is only a picture of it. Every action changes the array and then redraws the picture. When something looks wrong on screen, the question is always "what's in the array?" (Try typing `messages` into your browser's developer console.)
 
+Redrawing *everything* on every change is the deliberate trade: simplicity bought with wasted work. Here's what it actually costs, measured in a phone-sized browser slowed down about 4× to imitate a mid-range Android:
+
+| messages in the chat | one `render()` |
+| --- | --- |
+| 10 | 3 ms |
+| 100 | 27 ms |
+| 200 | 57 ms |
+| 400 | 91 ms |
+
+A screen redraws about every 16 ms, so past roughly 100 messages a render is no longer instant, and in chat style it runs once per bubble. You'd see that as a small hitch, not a freeze. The fix real frameworks use is to change only the parts that differ instead of rebuilding the lot — which is most of what React *is*, and a good deal more code than this whole file. Worth knowing the price of the simple version, and worth not paying for the complicated one until something actually feels slow.
+
 **The AI has no memory.** Every generation, the whole prompt is sent again from scratch: the character description, the scenario, and every message so far. That's why long chats get slow and expensive, and it's why features like summaries and lorebooks exist in bigger frontends: they're all clever ways of deciding what goes into that one prompt. Press **Show prompt** and look. You've spent years reading raw generations; this is the other half, the raw input.
 
 ## Tests

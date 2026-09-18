@@ -44,6 +44,15 @@ As with every version so far, **no README exercises were solved.** They're still
 - The **whole suite passes with `config.json` moved away**, which is what CI and a fresh download see.
 - The app was driven in a **real Chromium browser** against a fake provider, with 13 checks: the page loads and renders the greeting; a full send → reply round trip works; **Show prompt** shows the size summary and the system message; the API key never reaches the browser; and on the error path the page shows the message, disables Send, and logs no uncaught errors.
 - Path traversal was probed over a **raw socket** as well as through the test suite, to get past the fact that `curl` quietly tidies up `..` in paths before sending them. Worth knowing: for a while the defense looked stronger than it was, because the test client was fixing the attack.
+- A further **25 checks in real Chromium** covered the features that versions 2 and 3 had only ever tested in a *simulated* browser (happy-dom). All passed, and nothing needed fixing:
+  - **Chat style**: bubbles genuinely arrive one at a time rather than all at once, your own messages really are auto-wrapped in `<cht>` tags, and the setting survives a reload.
+  - **Double-tap to skip**: revealed the rest in 79 ms, against the ~20 seconds the timers would otherwise have taken.
+  - **The memory line on a 120-message chat**: exactly one line is drawn, it reads "Wren can't see the 65 older messages above this line," and the number in it **matches** the 65 messages actually faded — the count and the fading are drawn from the same calculation, so they can't drift apart. The prompt sent 55 of 120, excluded the oldest message, included the newest, and all 120 stayed on the page.
+  - **Phone layouts** at 360×640 and 390×844: no horizontal overflow, no button pushed off-screen, text box reachable.
+  - **Hammering Send** six times during a slow reply produced exactly one request.
+- **Performance was measured** rather than guessed, since this runs on a phone. See the new table in the README: `render()` costs about 27 ms at 100 messages and 91 ms at 400, on a browser slowed 4× to imitate a mid-range Android. Left alone deliberately — redraw-everything is the point of the design, and the fix is most of a framework.
+
+One note in the tradition of version 3's: the memory-line test **failed on its first run**, reporting no memory line at all. The app was right and the test was wrong. It seeded 120 messages that added up to about 5,600 tokens — comfortably *under* the 6,000 budget, so correctly nothing was forgotten. Making the messages longer turned it green. "The test is wrong" is always worth considering before "the code is broken," and it's much easier to consider when the test says what it expected.
 
 ### A note on how the traversal defense actually works
 
@@ -53,10 +62,11 @@ Both layers hold. But if you'd removed the check after reading only that comment
 
 ### Not tested yet
 
-- A **real AI provider**. Still only fakes. (The sandbox this was worked in can't reach `openrouter.ai` at all.)
+- A **real AI provider**. Still only fakes. (The sandbox this was worked in can't reach `openrouter.ai` at all, which is its own kind of proof that nothing here needs it.)
 - A **real Weaver card**, same as before.
 - The **GitHub Actions workflow** hasn't run yet; it runs on the next push.
-- Everything in version 3's "not tested yet" list still applies.
+- The **on-screen keyboard**, still. A real Chromium at phone size has no keyboard, so `interactive-widget=resizes-content` remains unverified. The *layout* around it is now checked at two phone sizes, which is as close as this gets without a phone.
+- **Double-tap on a real touchscreen.** It now passes in a real browser with touch emulation, which is better than before, but emulated taps have perfect timing and real thumbs don't. If 350 ms feels wrong, `DOUBLE_TAP_WINDOW_MS` is still the knob.
 
 ## Version 3
 
