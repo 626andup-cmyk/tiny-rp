@@ -2,6 +2,62 @@
 
 A record of what changed, and more importantly *why*. Real projects keep a file like this so that future-you (or anyone else) can understand decisions without digging through old chats.
 
+## Version 4
+
+### Why these changes
+
+This one is different from versions 2 and 3: no new features. Tiny RP went up on GitHub between then and now, and putting something where other people can download it exposes a different class of problem than using it yourself. The first one was fatal and completely invisible from inside Termux, where it already worked.
+
+`config.json` is in `.gitignore`, which is correct — your API key must never be uploaded. But it means the file **isn't in the repository**, so anyone who downloads Tiny RP (including future-you on a new phone) gets a copy with no config at all. The first thing it did was crash on line 60, reading a file that wasn't there. The fix is the standard answer to this, and worth knowing because you'll meet it in most projects you clone: ship an **example** config with no secrets in it, and have the program tell you to copy it.
+
+The rest came from deliberately mistreating the server to see what it did. The interesting find: posting a malformed body to `/api/generate` returned a 79KB Bun **HTML error page** — which included the folder path the server was running from — instead of the `{ "error": ... }` shape `app.js` knows how to display. So the app showed nothing at all, and the real explanation only existed in a page you'd never see. One line in the wrong place caused it: `await request.json()` sat *just above* the `try` block instead of inside one.
+
+There's a lesson in that worth more than the fix. `try` doesn't protect the lines near it, only the lines inside it. It's the kind of bug that never shows up while things work.
+
+As with every version so far, **no README exercises were solved.** They're still yours.
+
+### Added
+
+- **`config.example.json`**, tracked in git, with no real key in it. Copy it to `config.json` and fill it in. This is what makes a fresh download work.
+- **`TINY_RP_CONFIG`**: an environment variable to run against a different config file, so you can keep one per provider:
+  ```
+  TINY_RP_CONFIG=mancer.config.json bun run start
+  ```
+  (`*.config.json` is now gitignored too, so those stay private as well.)
+- **Server tests** (`tests/server.test.js`) — the first tests for `server.js`. The other test files check *pure functions*; this one starts the real server and talks to it like a browser would, which is called an **integration test**. Two tricks make it work with no API key and no money spent: a **fake provider** (our own tiny server answering the way OpenRouter would) and a **temporary config** in the system temp folder. Your real `config.json` is never read or touched.
+  - Among them is a **regression test** for path traversal: it asks for the config file six different ways (`/../config.json`, `/%2e%2e/config.json`, `/..%2f…`, and so on) and checks that the API key never appears in any answer.
+- **Continuous integration** (`.github/workflows/test.yml`): GitHub now runs `bun test` on every push. It needs no API key, which is a useful proof in itself — if the tests ever needed one, they'd be depending on your machine.
+- There are now **37 tests**, up from 26.
+
+### Fixed
+
+- **A fresh download couldn't start at all.** `bun run start` with no `config.json` crashed with a raw `ENOENT`. It now explains what's missing and exactly which command fixes it, and stops with exit code 1. A `config.json` with a syntax error (a stray comma) gets its own message instead of the same crash.
+- **Malformed JSON posted to `/api/generate` returned a 79KB HTML error page** leaking the server's folder path, and left the chat silently blank. It now returns `400` with a one-sentence JSON error, which `app.js` already knows how to display.
+- **A request with no `messages` was forwarded to the provider anyway**, so a front-end bug came back as a confusing complaint from the AI company — and, on a paid account, could be billed. It's now refused locally with a `400`, before the provider is contacted.
+- **`normalizeCard(null)` threw `Cannot read properties of null`.** A `.json` file is allowed to contain `null`, a number, or a list, and none of those are cards. You now get "That file doesn't look like a character card."
+- **A failed character load left a completely blank page.** If `character.json` was missing or the server wasn't running, `init()` threw, nothing rendered, and the only explanation was in the developer console. The error now appears in the chat the way every other error does, the heading stops claiming "Loading…", and Send is disabled. (This needed its own error path rather than the usual `render()`, because `render()` reads `character.name` — and having no character is the whole problem.)
+
+### How it was tested
+
+- All **37 unit and integration tests** pass.
+- The two new server tests were **checked against the old code first**, and both failed on it — the malformed-body case returned `500` instead of `400`, and the missing-`messages` case returned `200`, having gone to the provider. A regression test that passes on the broken version isn't testing anything, so this is always worth doing.
+- The **whole suite passes with `config.json` moved away**, which is what CI and a fresh download see.
+- The app was driven in a **real Chromium browser** against a fake provider, with 13 checks: the page loads and renders the greeting; a full send → reply round trip works; **Show prompt** shows the size summary and the system message; the API key never reaches the browser; and on the error path the page shows the message, disables Send, and logs no uncaught errors.
+- Path traversal was probed over a **raw socket** as well as through the test suite, to get past the fact that `curl` quietly tidies up `..` in paths before sending them. Worth knowing: for a while the defense looked stronger than it was, because the test client was fixing the attack.
+
+### A note on how the traversal defense actually works
+
+The comment in `serveStaticFile` says the `path.includes("..")` check is what stops `/../config.json`. That's true but incomplete, and the tests now spell out the rest. By the time our code sees the path, Bun's URL parser has **already resolved** `..` away, so that request arrives as plain `/config.json` and simply looks for `public/config.json`, which doesn't exist. The explicit check earns its keep on the encoded forms that survive parsing, like `/..%2fconfig.json`.
+
+Both layers hold. But if you'd removed the check after reading only that comment, testing `/../config.json` by hand would have reassured you, and `/..%2f` would still have been open. Security that you haven't tested from the outside is a guess.
+
+### Not tested yet
+
+- A **real AI provider**. Still only fakes. (The sandbox this was worked in can't reach `openrouter.ai` at all.)
+- A **real Weaver card**, same as before.
+- The **GitHub Actions workflow** hasn't run yet; it runs on the next push.
+- Everything in version 3's "not tested yet" list still applies.
+
 ## Version 3
 
 ### Why these features

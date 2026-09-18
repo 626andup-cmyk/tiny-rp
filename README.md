@@ -26,6 +26,7 @@ Your own messages get wrapped in `<cht>` tags automatically, so you never have t
 tiny-rp/
 ├── server.js            The back end. Serves the page and relays messages to the AI.
 ├── config.json          Your settings: API address, key, model. KEEP THIS PRIVATE.
+├── config.example.json  A copy of the above with no key in it. Safe to share.
 ├── package.json         Short names for commands: `bun run start`, `bun run test`.
 ├── .gitignore           Tells git never to upload config.json.
 ├── README.md            This file.
@@ -38,30 +39,48 @@ tiny-rp/
 │   ├── card-loader.js   Reads character cards out of .png and .json files.
 │   ├── prompt-budget.js Decides how much chat history fits in the prompt.
 │   └── character.json   The default character card.
-└── tests/               Automatic checks. Run them with `bun test`.
-    ├── chat-style.test.js
-    ├── card-loader.test.js
-    └── prompt-budget.test.js
+├── tests/               Automatic checks. Run them with `bun test`.
+│   ├── chat-style.test.js
+│   ├── card-loader.test.js
+│   ├── prompt-budget.test.js
+│   └── server.test.js   Starts the real server and talks to it.
+└── .github/workflows/   Runs the tests on GitHub after every push.
+    └── test.yml
 ```
+
+Note that `config.json` is **not** in the repository, on purpose: it holds your key, and `.gitignore` keeps it off GitHub. `config.example.json` is the one that ships, and it's what you copy to make your own.
 
 A suggested reading order: `index.html` first (shortest, sets the scene), then `app.js` (the main event), then `server.js`. After that, `prompt-budget.js` (short, and it explains the single most important limit in AI chat), then `chat-style.js` and its test file side by side: reading a function next to the examples that test it is one of the best ways to understand it. Save `card-loader.js` for when you're curious how files work at the byte level. `style.css` is for whenever you want to change how it looks.
 
 ## Setting it up
 
 1. Put the `tiny-rp` folder somewhere in Termux, for example `~/tiny-rp`.
-2. Open `config.json` (for example with `nano config.json`) and fill in:
+2. Make your own config by copying the example:
+   ```
+   cd ~/tiny-rp
+   cp config.example.json config.json
+   ```
+3. Open `config.json` (for example with `nano config.json`) and fill in:
    - `apiUrl`: your provider's **OpenAI-compatible chat completions** address. The example is OpenRouter's. Mancer and most other providers offer one too; check their docs for the exact URL.
    - `apiKey`: your key.
    - `model`: the model's name exactly as your provider spells it.
-3. Start it:
+4. Start it:
    ```
    cd ~/tiny-rp
    bun run start
    ```
    (`bun run start` is a shortcut defined in `package.json` for `bun run server.js`. Either works.)
-4. Open `http://localhost:8123` in your phone's browser.
+5. Open `http://localhost:8123` in your phone's browser.
 
 It uses port 8123 so it can run at the same time as Lumiverse. Stop the server with Ctrl+C in Termux.
+
+If you forget step 2, the server says so and tells you the command to run, rather than crashing.
+
+**Using more than one provider.** Keep a second config (any name ending in `.config.json` stays private too) and point the server at it:
+
+```
+TINY_RP_CONFIG=mancer.config.json bun run start
+```
 
 If something goes wrong, the error appears right in the chat, and the Termux window logs every request the browser makes. Watching that log while you click around is one of the best ways to learn what's going on.
 
@@ -105,13 +124,24 @@ If you understand those six steps, you understand the skeleton of every AI chat 
 
 ## Tests
 
-The `tests/` folder holds 26 small automatic checks, each one an example of how the bubble splitter, the card reader, or the prompt budget should behave. Run them with:
+The `tests/` folder holds 37 small automatic checks. Run them with:
 
 ```
 bun test
 ```
 
+They come in two flavors, and the difference is worth knowing.
+
+**Unit tests** (`chat-style`, `card-loader`, `prompt-budget`) check *pure functions*: give it an input, look at the output, nothing else involved. These are fast and easy to write, which is exactly why those three files were built as pure functions in the first place.
+
+**Integration tests** (`server`) check things that can't be reduced to an input and an output. `server.js` listens on a port, reads a config file, and calls an AI provider over the internet. So instead the test *starts the real server* and talks to it the way your browser would. It gets away without an API key using two tricks worth stealing:
+
+- a **fake provider**: our own tiny server that answers the way OpenRouter would, which also lets the test check what our server *sent* (did it really attach the key?);
+- a **temporary config** in the system temp folder, so your real `config.json` is never read.
+
 Get into the habit of running them after you change any of the helper files. If a test goes red, either you broke something, or you changed your mind about how it should work, in which case you update the test. Writing a new test *before* you add a feature ("I want this input to give that output") is a surprisingly relaxing way to program.
+
+GitHub runs `bun test` by itself after every push (see `.github/workflows/test.yml`). It has no API key, which is the point: if a test ever passes in Termux but fails there, something has crept in that depends on your machine.
 
 ## Glossary
 
@@ -146,6 +176,12 @@ Get into the habit of running them after you change any of the helper files. If 
 **Timer.** `setTimeout(fn, ms)` runs a function later. Chat style is a chain of timers, each one scheduling the next.
 
 **Bytes.** Every file is a list of numbers from 0 to 255. A file format is an agreement about what they mean. `card-loader.js` reads the PNG format by hand.
+
+**Environment variable.** A setting handed to a program by whatever started it, rather than read from a file. `TINY_RP_CONFIG=other.json bun run start` sets one for that run only. JavaScript reads them from `process.env`.
+
+**Regression test.** A test that exists to stop a bug from coming back. It doesn't describe a feature; it pins down something that must stay impossible. The path-traversal test in `tests/server.test.js` is one. Write one every time you fix a real bug, and it can only ever bite you once.
+
+**CI (continuous integration).** Running your tests automatically on someone else's computer every time you push, to catch anything that secretly depended on yours.
 
 ## Exercises
 
