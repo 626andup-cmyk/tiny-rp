@@ -1,0 +1,421 @@
+/*
+  =====================================================================
+   style.css  —  how the page LOOKS
+  =====================================================================
+
+  CSS is a list of RULES. Each rule has two parts:
+
+     selector {            <- WHICH elements this rule applies to
+       property: value;    <- WHAT to change about them
+     }
+
+  Common selectors:
+     body          every <body> tag
+     .message      every element with class="message"
+     #chat-log     the ONE element with id="chat-log"
+     .a .b         any .b that is somewhere INSIDE an .a
+
+  Comments in CSS look like this one: slash-star ... star-slash.
+
+  Try this: change a color below, save, and refresh the page.
+  That's the fastest feedback loop in all of programming.
+  =====================================================================
+*/
+
+
+/* ---------------------------------------------------------------------
+   CSS VARIABLES (officially "custom properties")
+   ---------------------------------------------------------------------
+   `:root` means "the whole page." Variables defined here can be used
+   anywhere with var(--name). Change a color in ONE place and it
+   changes everywhere. Variable names must start with two dashes.
+*/
+:root {
+  --bg:        #1e2430;  /* page background: foggy night blue       */
+  --surface:   #283042;  /* slightly lighter: bars and panels        */
+  --text:      #e8e4da;  /* main text: warm off-white, easy on eyes  */
+  --muted:     #97a0b0;  /* less important text (names, hints)       */
+  --user-edge: #a996d6;  /* stripe beside YOUR messages: lavender    */
+  --accent:    #7fb8aa;  /* buttons and focus rings: sea-glass green */
+  --danger:    #d98a8a;  /* error messages                           */
+  --bubble-them: #323b50; /* chat style: the character's bubbles     */
+  --bubble-you:  #43395e; /* chat style: your bubbles (lavender-ish) */
+
+  /* Fonts. The browser uses the first one it has, left to right. */
+  --story-font: Georgia, "Iowan Old Style", "Noto Serif", serif;
+  --ui-font:    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/*
+  `@media` rules only apply in certain situations.
+  This one applies when the device is set to LIGHT mode.
+  We just swap the variables, and everything else follows.
+*/
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:        #f3f1ec;
+    --surface:   #e4e1d8;
+    --text:      #22262e;
+    --muted:     #5f6573;
+    --user-edge: #6f5aa8;
+    --accent:    #2f7a69;
+    --danger:    #a63d3d;
+    --bubble-them: #e2dfd6;
+    --bubble-you:  #ddd5ef;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   PAGE LAYOUT
+   ---------------------------------------------------------------------
+   `box-sizing: border-box` makes width/height INCLUDE padding and
+   borders. Without it, a 100px-wide box with 10px padding is really
+   120px wide, which confuses everyone. `*` means "every element."
+*/
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;  /* let the page fill the whole screen */
+  margin: 0;     /* browsers add a margin by default; remove it */
+}
+
+/*
+  On phones, "100%" height can include the area hidden behind the
+  browser's address bar. `dvh` ("dynamic viewport height") is the
+  height you can ACTUALLY see right now, and it updates as the address
+  bar and keyboard come and go.
+
+  Older browsers don't understand `dvh`. When a browser doesn't
+  understand a rule, it ignores that rule and keeps the one above.
+  That makes this a free "fallback": new browsers get dvh, old ones
+  keep 100%.
+*/
+body {
+  height: 100dvh;
+}
+
+/*
+  FLEXBOX is a layout tool for putting things in a row or column.
+  Here the body becomes a COLUMN: header on top, chat in the middle,
+  input bar at the bottom.
+*/
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui-font);
+}
+
+
+/* ---------------------------------------------------------------------
+   TOP BAR
+   --------------------------------------------------------------------- */
+.top-bar {
+  display: flex;                   /* a ROW this time (the default) */
+  align-items: center;             /* line things up vertically     */
+  justify-content: space-between;  /* push the name left, tools right */
+  gap: 0.75rem;                    /* space between children        */
+  padding: 0.6rem 1rem;            /* top/bottom 0.6rem, sides 1rem */
+  background: var(--surface);
+}
+
+/*
+  `rem` is a unit meaning "times the base font size" (usually 16px).
+  So 1.25rem ≈ 20px. Using rem instead of px means things scale up
+  if someone makes their text bigger for readability.
+*/
+.top-bar h1 {
+  margin: 0;
+  font-family: var(--story-font);
+  font-size: 1.25rem;
+  font-weight: normal;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;   /* on a narrow phone, let buttons wrap to a 2nd line */
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+
+/* ---------------------------------------------------------------------
+   THE CHAT LOG
+   --------------------------------------------------------------------- */
+#chat-log {
+  flex: 1;           /* "take up all the leftover space" in the column */
+  overflow-y: auto;  /* if messages don't fit, scroll inside this box  */
+  padding: 1rem;
+}
+
+/* One message. app.js creates these. */
+.message {
+  max-width: 42rem;      /* keep lines short enough to read comfortably */
+  margin: 0 auto 1.25rem; /* "auto" left/right centers the column       */
+}
+
+/* The small name line above each message. */
+.message .speaker {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+/* The actual words of the message. */
+.message .text {
+  font-family: var(--story-font);
+  font-size: 1.05rem;
+  line-height: 1.6;
+
+  /*
+    IMPORTANT: by default, HTML squashes line breaks and extra spaces
+    into a single space. `pre-wrap` keeps line breaks from the AI's
+    reply (and from yours) while still wrapping long lines.
+  */
+  white-space: pre-wrap;
+}
+
+/* YOUR messages get a colored stripe on the left so they stand out. */
+.message.from-user {
+  border-left: 3px solid var(--user-edge);
+  padding-left: 0.75rem;
+}
+
+/* Error messages (for example, a wrong API key). */
+.message.error .text {
+  color: var(--danger);
+  font-family: var(--ui-font);
+  font-size: 0.9rem;
+}
+
+/* The little Delete / Regenerate buttons under a message. */
+.message-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.message-actions button {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+
+/* ---------------------------------------------------------------------
+   CONTEXT MEMORY
+   ---------------------------------------------------------------------
+   Messages too old to fit in the prompt get faded out, and a divider
+   line marks where the AI's memory begins. See prompt-budget.js.
+*/
+.message.forgotten {
+  opacity: 0.45;
+}
+
+.memory-line {
+  max-width: 42rem;
+  margin: 0 auto 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.memory-line hr {
+  border: none;
+  border-top: 1px dashed var(--muted); /* dashed = "a boundary, not a wall" */
+  margin: 0 0 0.4rem;
+}
+
+.memory-line p {
+  margin: 0;
+}
+
+
+/* ---------------------------------------------------------------------
+   TYPING INDICATOR
+   ---------------------------------------------------------------------
+   It's a <button> (so it can be tapped and reached by keyboard), but we
+   strip the button look so it reads as a quiet status line.
+*/
+.typing-indicator {
+  display: block;
+  max-width: 42rem;
+  width: 100%;
+  margin: 0 auto 1rem;
+  padding: 0.25rem 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  text-align: left;
+  user-select: none;   /* double-tapping shouldn't select the text */
+  touch-action: manipulation; /* and shouldn't zoom the page, either */
+}
+
+/* A disabled indicator (still waiting on the AI) shouldn't look faded. */
+.typing-indicator:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/*
+  Three animated dots after the text. `::after` adds content AFTER an
+  element without touching the HTML. `@keyframes` defines an animation
+  by describing its stages.
+*/
+.typing-indicator::after {
+  content: "…";
+  display: inline-block;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 1; }
+}
+
+/*
+  Some people get motion sick or distracted by animation, and they can
+  tell their device to reduce it. Always respect that setting.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .typing-indicator::after {
+    animation: none;
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   CHAT STYLE
+   ---------------------------------------------------------------------
+   app.js adds class="chat-style" to <body> when chat style is on.
+   Every selector below starts with `body.chat-style`, so these rules
+   ONLY apply in chat style. That's a handy pattern: one class on a
+   parent element switches a whole "theme" on and off.
+*/
+
+/* Stack the bubbles in a column, like a messaging app. */
+body.chat-style .message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;  /* the character's bubbles hug the left  */
+}
+
+/* Your messages: no stripe, and everything hugs the right side. */
+body.chat-style .message.from-user {
+  align-items: flex-end;
+  border-left: none;
+  padding-left: 0;
+}
+
+.bubble {
+  max-width: 85%;
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.3rem;
+  border-radius: 1rem;
+  background: var(--bubble-them);
+  font-family: var(--story-font);
+  font-size: 1rem;
+  line-height: 1.45;
+  white-space: pre-wrap;     /* keep line breaks inside a bubble */
+  overflow-wrap: anywhere;   /* break long links so they don't overflow */
+}
+
+.from-user .bubble {
+  background: var(--bubble-you);
+}
+
+
+/* ---------------------------------------------------------------------
+   PROMPT VIEWER (the "Show prompt" box)
+   --------------------------------------------------------------------- */
+#prompt-viewer {
+  max-height: 40vh;       /* vh = % of screen height. 40vh = 40%. */
+  overflow: auto;
+  margin: 0;
+  padding: 1rem;
+  background: var(--surface);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere; /* break very long words so they don't overflow */
+}
+
+
+/* ---------------------------------------------------------------------
+   INPUT BAR
+   --------------------------------------------------------------------- */
+.input-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  background: var(--surface);
+}
+
+textarea {
+  flex: 1;              /* the text box stretches; the button doesn't */
+  resize: vertical;     /* only let people drag it taller, not wider  */
+  padding: 0.5rem;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;        /* use the page's font instead of the browser's */
+  font-family: var(--story-font);
+}
+
+
+/* ---------------------------------------------------------------------
+   BUTTONS
+   --------------------------------------------------------------------- */
+button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;      /* show the "hand" cursor on hover */
+}
+
+/* `:disabled` matches a button app.js has turned off (while waiting). */
+button:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+#send-button {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/*
+  `:focus-visible` matches whatever element you've reached using the
+  keyboard (Tab key). A clear outline here is essential for people
+  who can't use a mouse. Never remove focus outlines without replacing
+  them with something just as visible!
+*/
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+
+/* ---------------------------------------------------------------------
+   UTILITIES
+   ---------------------------------------------------------------------
+   Hides something from EYES but keeps it available to screen readers.
+   A standard trick; you'll see it in lots of real websites.
+*/
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

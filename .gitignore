@@ -1,0 +1,3 @@
+# Files listed here are ignored by git, so they never get uploaded
+# to GitHub. config.json holds your API key, so it must stay private.
+config.json

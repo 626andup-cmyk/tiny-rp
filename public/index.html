@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!--
+  ^ That line tells the browser "this is modern HTML." It MUST be the
+  very first thing in the file, even before comments like this one.
+  If anything comes before it, browsers switch into "quirks mode"
+  and imitate bugs from the 1990s. (Really.)
+-->
+<!--
+  =====================================================================
+   index.html  —  the SKELETON of the page
+  =====================================================================
+
+  HTML describes WHAT is on the page: a header, a list of messages,
+  a text box, some buttons. It does not describe what things LOOK like
+  (that's style.css) or what they DO (that's app.js).
+
+  A good way to think about the three files:
+     HTML = the nouns      (a button, a box, a list)
+     CSS  = the adjectives (blue, rounded, big)
+     JS   = the verbs      (click, send, delete)
+
+  HTML is made of TAGS. Most come in pairs:
+     <p> ... </p>        "p" = paragraph
+  and some stand alone:
+     <meta ...>
+
+  Tags can have ATTRIBUTES, which are extra details:
+     <button id="send-button">
+  The `id` attribute gives an element a unique name so that app.js
+  can find it later with document.getElementById("send-button").
+  =====================================================================
+-->
+
+
+<!-- `lang="en"` helps screen readers pronounce things correctly. -->
+<html lang="en">
+
+<!--
+  The <head> holds information ABOUT the page.
+  Nothing in here shows up on the page itself.
+-->
+<head>
+  <!-- Use UTF-8 text encoding, so emoji and accents work. -->
+  <meta charset="UTF-8">
+
+  <!--
+    Without this line, phones pretend to be a wide desktop screen and
+    shrink everything to be tiny. This tells them "use your real width."
+
+    `interactive-widget=resizes-content` tells Android Chrome to SHRINK
+    the page when the on-screen keyboard opens, instead of sliding the
+    keyboard over the top of it. That keeps the text box and the
+    newest message visible while you type.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+
+  <!-- The text shown on the browser tab. -->
+  <title>Tiny RP</title>
+
+  <!-- Load our stylesheet. `href` is the path to the file. -->
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<!-- The <body> is everything you actually see. -->
+<body>
+
+  <!--
+    <header> is a "semantic" tag. It works like a plain <div> (a
+    generic box), but its name tells humans and screen readers what
+    it's FOR. Semantic tags are good manners.
+  -->
+  <header class="top-bar">
+    <!--
+      This heading starts empty. app.js fills in the character's
+      name once the character card has loaded.
+    -->
+    <h1 id="character-name">Loading…</h1>
+
+    <!--
+      A group of tool buttons.
+      `type="button"` means "this button just runs JavaScript."
+      (Without it, buttons inside forms try to submit the form.)
+      `title` shows a tooltip when you hover on desktop.
+    -->
+    <div class="tools">
+      <button type="button" id="chat-style-button" aria-pressed="false" title="Show replies as separate text bubbles">Chat style: off</button>
+      <button type="button" id="load-card-button" title="Open a .png or .json character card">Load card</button>
+      <button type="button" id="show-prompt-button" title="See exactly what gets sent to the AI">Show prompt</button>
+      <button type="button" id="new-chat-button" title="Erase this chat and start over">New chat</button>
+    </div>
+
+    <!--
+      A FILE PICKER. `type="file"` opens your phone's file chooser.
+      `accept` limits it to card files. It's `hidden` because file
+      pickers are hard to style; the "Load card" button above clicks
+      it for us (see app.js).
+    -->
+    <input type="file" id="card-file-input" accept=".png,.json" hidden>
+  </header>
+
+  <!--
+    <main> holds the main content of the page: the chat log.
+    It starts empty. app.js adds one element per message.
+
+    `aria-live="polite"` is an ACCESSIBILITY attribute. It tells
+    screen readers "when new stuff appears in here, read it out
+    loud once you're done with whatever you're saying."
+  -->
+  <main id="chat-log" aria-live="polite"></main>
+
+  <!--
+    This box shows the raw prompt when you press "Show prompt."
+    `hidden` means it starts invisible. app.js toggles it.
+    <pre> means "preformatted": spaces and line breaks are kept
+    exactly as written, which is perfect for showing JSON.
+  -->
+  <pre id="prompt-viewer" hidden></pre>
+
+  <!-- The bottom area where you type. -->
+  <footer class="input-bar">
+    <!--
+      <textarea> is a multi-line text box.
+      `rows="2"` makes it start two lines tall.
+      `placeholder` is the grey hint text shown while it's empty.
+      <label> gives the box a name for screen readers. The class
+      "visually-hidden" (see style.css) hides it from eyes only.
+    -->
+    <label for="message-input" class="visually-hidden">Your message</label>
+    <textarea id="message-input" rows="2" placeholder="Write your reply… (Shift+Enter for a new line)"></textarea>
+
+    <button type="button" id="send-button">Send</button>
+  </footer>
+
+  <!--
+    Load our JavaScript at the bottom of the body.
+    Why at the bottom? The browser reads the page top to bottom. If the
+    scripts ran first, the buttons and boxes wouldn't exist yet, and
+    app.js wouldn't be able to find them.
+
+    The ORDER of the scripts matters too. The first three define helper
+    functions that app.js uses, so they have to load first.
+  -->
+  <script src="chat-style.js"></script>
+  <script src="card-loader.js"></script>
+  <script src="prompt-budget.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

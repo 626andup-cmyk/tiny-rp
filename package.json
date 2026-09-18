@@ -1,0 +1,8 @@
+{
+  "name": "tiny-rp",
+  "private": true,
+  "scripts": {
+    "start": "bun run server.js",
+    "test": "bun test"
+  }
+}
