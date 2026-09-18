@@ -17,7 +17,11 @@
 
 import { test, expect } from "bun:test";
 
-const { fillMacros, buildSystemMessage } = require("../public/prompt-builder.js");
+const {
+  fillMacros,
+  buildSystemMessage,
+  systemMessageParts,
+} = require("../public/prompt-builder.js");
 
 
 // A minimal card. Real ones have more, but these are the fields that
@@ -146,6 +150,41 @@ test("a card missing most of its fields still builds a prompt", () => {
   expect(content).toContain("You are Ghost");
   expect(content).toContain("Description:");
   expect(content).not.toContain("undefined");
+});
+
+// ---------------------------------------------------------------------
+//  systemMessageParts
+//  The size summary in Show prompt counts these pieces to tell you
+//  which part of your card is eating the budget. The first test is the
+//  one that matters: the pieces it counts must be exactly the message
+//  that gets sent. If those two ever drift apart, the screen starts
+//  reporting numbers that aren't true, which is worse than no numbers.
+// ---------------------------------------------------------------------
+
+test("the parts joined back together ARE the system message", () => {
+  for (const chatStyle of [false, true]) {
+    const joined = systemMessageParts(wren, "You", chatStyle)
+      .map((part) => part.text)
+      .join("\n\n");
+    expect(joined).toBe(buildSystemMessage(wren, "You", chatStyle).content);
+  }
+});
+
+test("the parts are labelled, in the order they appear", () => {
+  const labels = systemMessageParts(wren, "You", false).map((part) => part.label);
+  expect(labels).toEqual([
+    "Instructions", "Description", "Personality", "Scenario", "Examples",
+  ]);
+});
+
+test("chat style changes the instructions and nothing else", () => {
+  const off = systemMessageParts(wren, "You", false);
+  const on = systemMessageParts(wren, "You", true);
+
+  expect(on[0].text).not.toBe(off[0].text);
+  for (let i = 1; i < off.length; i++) {
+    expect(on[i].text).toBe(off[i].text);
+  }
 });
 
 test("the greeting is not part of the system message", () => {

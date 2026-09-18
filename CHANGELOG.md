@@ -34,10 +34,15 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
   - It digs the character's name out of the system prompt, so the canned replies say "Wren almost smiles" rather than something generic.
   - Five commands you can send to make it misbehave **on purpose**: `/slow` (6 seconds, to watch the typing indicator), `/error` (a 500, to see errors land in the chat), `/empty` (`(empty reply)`), `/long` (a wall of text, to make the memory line appear fast) and `/bubbles` (a pile of short `<cht>` bubbles). Breaking things deliberately is the quickest way to learn what code does, so now there's a button for it.
   - It prints every prompt it receives with its size. Watching that scroll past while you chat is the clearest possible demonstration that the *whole conversation* is sent again every single time.
+- **Show prompt now says where the space goes**, not just how much of it there is: the character card against the conversation, and then the card broken down by field, biggest first, with a small bar for each.
+
+  This is the most useful thing in the app for anyone who writes cards. The card is a *fixed* cost paid in full on every single turn, before a word of conversation. A card with 1,500 tokens of example messages has spent a quarter of a 6,000-token budget before you say hello — and that, not the model being forgetful, is why your character loses the thread so early. You can't see that in one total. You can see it instantly in a list.
+
+  The counting and the message come from **the same function**, `systemMessageParts`, so they can't drift apart and start reporting numbers that aren't true. There's a test asserting the parts joined back together are exactly the message that gets sent.
 - **17 tests for the prompt builder**, which had none before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
-- There are now **91 tests**, up from 37.
+- There are now **94 tests**, up from 37.
 
 ### Fixed
 
@@ -113,7 +118,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
 
 ### How it was tested
 
-- All **91 tests** pass, in well under a second.
+- All **94 tests** pass, in well under a second.
 - One test **caught a real (if small) bug while being written**: a character named entirely in emoji slugged down to nothing, and the filename came out `chat-chat-2026-09-18.json`. The test was right and the code was wrong, which is the nicer way round.
 - The whole feature was driven in **real Chromium**, 21 checks: pressing Back up really does produce a download, with the right name, containing the right character and the actual words that were said. Then the chat was **wiped** and restored from that file, and the restore survived a reload — so it was genuinely saved, not just drawn on screen. Feeding it a character card gives "not a Tiny RP chat backup"; feeding it a corrupt file gives "that file isn't JSON at all"; and in both cases **the good chat is still there afterwards**.
 - Top bar heights were measured at five phone widths for four different CSS approaches before picking one. That's the table above.

@@ -20,7 +20,24 @@ Your own messages get wrapped in `<cht>` tags automatically, so you never have t
 
 **Back up / Restore** saves a chat to a file you can keep, and reads it back. Everything else Tiny RP remembers lives in your browser's storage, which is tied to one browser on one phone — clearing your browsing data wipes it, and so does a new phone. A backup is a plain `.json` file you can open in any text editor, holding the character *and* the messages, because half a roleplay is the character it was with. `chat-backup.js` explains why the file says what format and version it is, which is how file formats survive the programs that wrote them.
 
-**Context memory** keeps long chats working. Models can only read so much at once, so when a chat outgrows the prompt budget, the oldest messages are left out of what gets sent. You can *see* this happen: those messages fade, and a dashed line reads "Wren can't see the 12 older messages above this line." Nothing is deleted; it's just out of the character's reach. **Show prompt** now opens with a size summary like "About 5,210 of 6,000 tokens. Sending 48 of 60 chat messages." The budget is `PROMPT_BUDGET_TOKENS` in `prompt-budget.js`; set it to fit your model.
+**Context memory** keeps long chats working. Models can only read so much at once, so when a chat outgrows the prompt budget, the oldest messages are left out of what gets sent. You can *see* this happen: those messages fade, and a dashed line reads "Wren can't see the 12 older messages above this line." Nothing is deleted; it's just out of the character's reach. **Show prompt** opens with a size summary, and a breakdown of where the space actually goes:
+
+```
+About 1,438 of 6,000 tokens. Sending 25 of 25 chat messages.
+
+Where the space goes:
+the character card       345   24%  ████············
+the conversation       1,093   76%  ████████████····
+
+The card, biggest part first:
+  Examples               196   14%  ██··············
+  Description             92    6%  █···············
+  Instructions            28    2%  ················
+  Scenario                15    1%  ················
+  Personality             13    1%  ················
+```
+
+This is the most useful thing in the app if you write your own cards. You pay for the whole card again on every single turn, before a word of conversation — so a card with 1,500 tokens of example messages has spent a quarter of the budget before you say hello, and that is exactly why your character starts forgetting things early. The budget is `PROMPT_BUDGET_TOKENS` in `prompt-budget.js`; set it to fit your model.
 
 ## The files
 
@@ -176,7 +193,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 91 automatic checks. Run them with:
+The `tests/` folder holds 94 automatic checks. Run them with:
 
 ```
 bun test

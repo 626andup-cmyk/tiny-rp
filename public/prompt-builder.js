@@ -76,21 +76,32 @@ function fillMacros(text, characterName, userName) {
 
 
 // ---------------------------------------------------------------------
-//  buildSystemMessage(character, userName, chatStyle)
-//  Builds the "system" message: the part of the prompt that describes
-//  the character and the rules. It's the same every turn (unless you
-//  change characters or switch chat style).
+//  systemMessageParts(character, userName, chatStyle)
+//  The system message, in labelled pieces, in order.
+//  Returns:  [ { label: "Description", text: "Description:\n…" }, … ]
 //
-//  Returns a message object ready to go into the prompt:
-//      { role: "system", content: "..." }
+//  WHY PIECES INSTEAD OF ONE STRING
+//  --------------------------------
+//  buildSystemMessage below just glues these together, so you could ask
+//  what the labels are for. They're for the size summary in Show prompt,
+//  which tells you how many tokens each part of your card is costing.
+//
+//  It's the same trick planPrompt uses: work it out ONCE, in a shape
+//  that more than one caller can use. The alternative is a second
+//  function that re-does the same string-building to count it, which
+//  works right up until someone edits one and not the other, and then
+//  the screen confidently reports numbers that aren't true.
+//
+//  If you want to know why your character forgets things so fast, this
+//  is the answer: a card with 1,500 tokens of example messages is
+//  spending a quarter of an 6,000-token budget before you say a word.
 // ---------------------------------------------------------------------
-function buildSystemMessage(character, userName, chatStyle) {
+function systemMessageParts(character, userName, chatStyle) {
   const fill = (text) => fillMacros(text, character.name, userName);
 
-  // Build the system message out of pieces of the character card.
   // An array of lines joined with "\n" (newline) is an easy way to
   // build a long block of text.
-  const lines = [
+  const instructions = [
     `You are ${character.name} in an ongoing roleplay with ${userName}.`,
     `Write only ${character.name}'s replies. Never write ${userName}'s actions or dialogue.`,
   ];
@@ -99,33 +110,47 @@ function buildSystemMessage(character, userName, chatStyle) {
   // (Cards whose example messages already use <cht> tags will mostly
   // do this anyway. Models copy what they see.)
   if (chatStyle) {
-    lines.push(
+    instructions.push(
       "This conversation is happening over text messages. Write each reply as one or more short messages, wrapping each message in <cht></cht> tags."
     );
   }
 
-  lines.push(
-    "",
-    "Description:",
-    fill(character.description),
-    "",
-    "Personality:",
-    fill(character.personality),
-    "",
-    "Scenario:",
-    fill(character.scenario),
-    "",
-    "Example of the writing style:",
-    // <START> is a divider SillyTavern-style cards use between
-    // examples. The AI doesn't need to see it, so we remove it.
-    fill(character.mes_example).replaceAll("<START>", "").trim(),
-  );
+  return [
+    { label: "Instructions", text: instructions.join("\n") },
+    { label: "Description", text: "Description:\n" + fill(character.description) },
+    { label: "Personality", text: "Personality:\n" + fill(character.personality) },
+    { label: "Scenario", text: "Scenario:\n" + fill(character.scenario) },
+    {
+      label: "Examples",
+      // <START> is a divider SillyTavern-style cards use between
+      // examples. The AI doesn't need to see it, so we remove it.
+      text:
+        "Example of the writing style:\n" +
+        fill(character.mes_example).replaceAll("<START>", "").trim(),
+    },
+  ];
+}
 
-  return { role: "system", content: lines.join("\n") };
+
+// ---------------------------------------------------------------------
+//  buildSystemMessage(character, userName, chatStyle)
+//  The "system" message: the part of the prompt that describes the
+//  character and the rules. It's the same every turn (unless you change
+//  characters or switch chat style).
+//
+//  Returns a message object ready to go into the prompt:
+//      { role: "system", content: "..." }
+// ---------------------------------------------------------------------
+function buildSystemMessage(character, userName, chatStyle) {
+  const content = systemMessageParts(character, userName, chatStyle)
+    .map((part) => part.text)
+    .join("\n\n");
+
+  return { role: "system", content: content };
 }
 
 
 // Share with the tests (see the note at the bottom of chat-style.js).
 if (typeof module !== "undefined") {
-  module.exports = { fillMacros, buildSystemMessage };
+  module.exports = { fillMacros, buildSystemMessage, systemMessageParts };
 }

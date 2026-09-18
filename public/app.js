@@ -942,16 +942,82 @@ function createButton(label, onClick) {
 //  JSON.stringify(value, null, 2) means "indent with 2 spaces."
 // ---------------------------------------------------------------------
 function updatePromptViewer() {
+  promptViewer.textContent =
+    promptSizeSummary() + "\n\n" + JSON.stringify(buildPrompt(), null, 2);
+}
+
+
+// ---------------------------------------------------------------------
+//  promptSizeSummary()
+//  A few lines showing not just how big the prompt is, but WHERE the
+//  space goes.
+//
+//  This is the most useful thing in the app for anyone who writes
+//  cards. Every turn you pay for the whole character card again, before
+//  a single line of conversation. If your example messages come to
+//  1,500 tokens, that's a quarter of the budget gone permanently, and
+//  it's exactly why your character starts forgetting things so early.
+//  You can't tell that from a single total; you can tell it instantly
+//  from a list.
+// ---------------------------------------------------------------------
+function promptSizeSummary() {
   const plan = planPrompt();
   const included = messages.length - plan.firstIncluded;
 
   // toLocaleString() adds thousands separators: 6000 → "6,000".
-  const summary =
+  const lines = [
     `About ${plan.tokens.toLocaleString()} of ${PROMPT_BUDGET_TOKENS.toLocaleString()} tokens. ` +
-    `Sending ${included} of ${messages.length} chat messages.`;
+      `Sending ${included} of ${messages.length} chat messages.`,
+  ];
 
-  promptViewer.textContent =
-    summary + "\n\n" + JSON.stringify(buildPrompt(), null, 2);
+  // The card is a FIXED cost: paid in full on every single turn.
+  // Everything left over is the conversation itself.
+  const cardTokens = estimateTokens(plan.system.content);
+  const historyTokens = Math.max(0, plan.tokens - cardTokens);
+  const total = Math.max(1, cardTokens + historyTokens); // never divide by 0
+
+  lines.push("", "Where the space goes:");
+  lines.push(costLine("the character card", cardTokens, total));
+  lines.push(costLine("the conversation", historyTokens, total));
+
+  // And which part of the card, biggest first — the one you can act on.
+  // [...array] copies it before sorting, because .sort() rearranges the
+  // array you give it, and that one came from prompt-builder.js.
+  const parts = [...systemMessageParts(character, USER_NAME, chatStyle)]
+    .map((part) => ({ label: part.label, tokens: estimateTokens(part.text) }))
+    .sort((a, b) => b.tokens - a.tokens);
+
+  lines.push("", "The card, biggest part first:");
+  for (const part of parts) {
+    lines.push(costLine("  " + part.label, part.tokens, total));
+  }
+
+  return lines.join("\n");
+}
+
+
+// ---------------------------------------------------------------------
+//  costLine(label, tokens, total)
+//  One row of the size summary, with a little bar drawn out of block
+//  characters. padEnd/padStart add spaces to line the columns up, which
+//  only works because the prompt viewer is a <pre> in a fixed-width
+//  font: every character is exactly as wide as every other one.
+// ---------------------------------------------------------------------
+function costLine(label, tokens, total) {
+  const share = tokens / total;
+  const filled = Math.round(share * 16);
+
+  // The bar goes LAST on purpose. Block characters aren't guaranteed to
+  // be the same width as everything else in whatever font your phone
+  // picks for monospace, and if one is even slightly off, a bar in the
+  // middle of the line would shove the column after it out of line.
+  // Nothing comes after it, so nothing can be pushed about.
+  return (
+    label.padEnd(22) +
+    tokens.toLocaleString().padStart(6) +
+    (share * 100).toFixed(0).padStart(5) + "%  " +
+    "█".repeat(filled) + "·".repeat(16 - filled)
+  );
 }
 
 
