@@ -104,3 +104,15 @@ test("normalizeCard handles V1 cards (fields at the top level)", () => {
 test("normalizeCard refuses a card with no name", () => {
   expect(() => normalizeCard({ data: {} })).toThrow("no character name");
 });
+
+test("normalizeCard refuses JSON that isn't a card at all", () => {
+  // JSON.parse happily returns any of these, and every one of them used
+  // to crash with an unreadable TypeError instead of saying what's wrong.
+  for (const notACard of [null, 42, "hello", true]) {
+    expect(() => normalizeCard(notACard)).toThrow("doesn't look like a character card");
+  }
+
+  // A list is an object as far as `typeof` is concerned, so it gets
+  // past the first check and is caught by the missing-name one instead.
+  expect(() => normalizeCard([])).toThrow("no character name");
+});

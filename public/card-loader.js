@@ -152,6 +152,19 @@ function decodeBase64Utf8(base64Text) {
 //  function and open your browser's developer console.)
 // ---------------------------------------------------------------------
 function normalizeCard(rawCard) {
+
+  // A .json file is allowed to contain `null`, a number, or a list, and
+  // a .png can have any old text hidden in it. None of those are cards.
+  // Without this check, `rawCard.data` on a null would throw a
+  // "Cannot read properties of null" TypeError, which tells you nothing
+  // about what actually went wrong. Check the shape first, so the
+  // message you get back is the friendly one below.
+  // (`typeof null` is the string "object" — a famous JavaScript wart —
+  //  which is why null needs naming separately.)
+  if (rawCard === null || typeof rawCard !== "object") {
+    throw new Error("That file doesn't look like a character card.");
+  }
+
   const data = rawCard.data ?? rawCard;
 
   if (!data.name) {

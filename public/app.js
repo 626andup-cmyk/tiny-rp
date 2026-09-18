@@ -120,17 +120,48 @@ const cardFileInput   = document.getElementById("card-file-input");
 async function init() {
   applyChatStyleSetting();
 
-  // Use the card you loaded last time, if there is one.
-  // Otherwise, ask the server for the default card.
-  let startingCharacter = loadSavedCharacter();
-  if (startingCharacter === null) {
-    // `fetch` is how the browser requests things over the network.
-    const response = await fetch(CHARACTER_FILE);
-    // Turn the response's JSON text into a JavaScript object.
-    startingCharacter = await response.json();
-  }
+  try {
+    // Use the card you loaded last time, if there is one.
+    // Otherwise, ask the server for the default card.
+    let startingCharacter = loadSavedCharacter();
+    if (startingCharacter === null) {
+      // `fetch` is how the browser requests things over the network.
+      const response = await fetch(CHARACTER_FILE);
 
-  setCharacter(startingCharacter);
+      // fetch only rejects when the network itself fails. A 404 is a
+      // perfectly successful round trip that happens to carry bad news,
+      // so we have to check `ok` ourselves or we'd try to read an error
+      // page as if it were a character.
+      if (!response.ok) {
+        throw new Error(`the server answered ${response.status}`);
+      }
+
+      // Turn the response's JSON text into a JavaScript object.
+      startingCharacter = await response.json();
+    }
+
+    setCharacter(startingCharacter);
+
+  } catch (error) {
+    // Everything else in the app reports errors through render(), but we
+    // can't use it here: render() reads `character.name`, and the whole
+    // problem is that we have no character. So we write to the page
+    // directly. Without this, a missing or broken character.json left
+    // you staring at a blank screen with the explanation buried in the
+    // developer console.
+    chatLog.replaceChildren(
+      createNoteElement(
+        `Couldn't load ${CHARACTER_FILE}: ${error.message}. ` +
+          `Check that the server is running, then refresh the page.`,
+        "error"
+      )
+    );
+
+    // The heading still says "Loading…" from index.html, which would be
+    // a lie from here on. There's nothing to send to, either.
+    nameHeading.textContent = "Tiny RP";
+    sendButton.disabled = true;
+  }
 }
 
 
