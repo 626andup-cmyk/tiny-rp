@@ -180,11 +180,15 @@ function readBackup(text) {
 //  Being strict here is a small security habit as well as a tidy one:
 //  a character named "../../secret" can't turn into a path that way.
 // ---------------------------------------------------------------------
-function backupFilename(characterName, date = new Date()) {
-  const slug = String(characterName ?? "")
+function nameToSlug(characterName) {
+  return String(characterName ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function backupFilename(characterName, date = new Date()) {
+  const slug = nameToSlug(characterName);
 
   // .toISOString() is "2026-09-18T17:40:12.000Z"; the first 10
   // characters are the date part.
@@ -197,12 +201,33 @@ function backupFilename(characterName, date = new Date()) {
 }
 
 
+// ---------------------------------------------------------------------
+//  cardFilename(characterName)
+//  For saving the character itself, rather than a chat: "wren-card.json".
+//
+//  It builds the name from the slug rather than picking the date back
+//  off a backup filename, which is what it used to do. That shortcut
+//  broke in two ways at once: a character called "Group chat" came out
+//  as "group-card.json", because the word "chat" was cut out of the
+//  middle, and one named in emoji came out as the memorable
+//  "chat-2026-09-18.json-card.json".
+//
+//  Taking a substring of something another function formatted is
+//  almost always a mistake. Build from the source instead.
+// ---------------------------------------------------------------------
+function cardFilename(characterName) {
+  const slug = nameToSlug(characterName);
+  return slug === "" ? "card.json" : `${slug}-card.json`;
+}
+
+
 // Share with the tests (see the note at the bottom of chat-style.js).
 if (typeof module !== "undefined") {
   module.exports = {
     buildBackup,
     readBackup,
     backupFilename,
+    cardFilename,
     isUsableMessage,
     BACKUP_FORMAT,
     BACKUP_VERSION,

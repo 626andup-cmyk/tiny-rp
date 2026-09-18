@@ -205,7 +205,7 @@ function fillTemplateText(text, character, userName) {
 //  Turns a template into the labelled pieces of a system message:
 //      [ { label: "Description", text: "Description:\nShe keeps…" }, … ]
 //
-//  The same shape prompt-builder.js used to build by hand, so the token
+//  The same shape this file used to build by hand, so the token
 //  breakdown in Show prompt keeps working and now names YOUR blocks.
 // ---------------------------------------------------------------------
 function applyTemplate(template, character, userName, chatStyle) {
@@ -287,9 +287,12 @@ function buildSystemMessage(character, userName, chatStyle, template = defaultTe
 //  obvious way back. Check it once, here, at the edge.
 // ---------------------------------------------------------------------
 function isUsableTemplate(value) {
+  // An EMPTY list is allowed on purpose. Deleting every block is a
+  // legitimate thing to want (it means "send no system prompt at all"),
+  // and rejecting it here would quietly reset your template to the
+  // default on the next reload while logging it as damaged.
   return (
     Array.isArray(value) &&
-    value.length > 0 &&
     value.every(
       (block) =>
         block !== null &&

@@ -21,6 +21,7 @@ const {
   buildBackup,
   readBackup,
   backupFilename,
+  cardFilename,
   isUsableMessage,
   BACKUP_VERSION,
 } = require("../public/chat-backup.js");
@@ -197,6 +198,18 @@ test("falls back to a plain name when nothing survives", () => {
   expect(backupFilename("🦊🔥", someDay)).toBe("chat-2026-09-18.json");
   expect(backupFilename("", someDay)).toBe("chat-2026-09-18.json");
   expect(backupFilename(null, someDay)).toBe("chat-2026-09-18.json");
+});
+
+test("a card filename is built from the name, not carved out of a chat one", () => {
+  // It used to take backupFilename's output and cut "-chat-<date>" off
+  // the end with a regex, which broke twice over: a character called
+  // "Group chat" lost the word from the middle of her own name, and one
+  // named in emoji produced "chat-2026-09-18.json-card.json".
+  expect(cardFilename("Wren")).toBe("wren-card.json");
+  expect(cardFilename("Group chat")).toBe("group-chat-card.json");
+  expect(cardFilename("🦊")).toBe("card.json");
+  expect(cardFilename("")).toBe("card.json");
+  expect(cardFilename("../../etc/passwd")).toBe("etc-passwd-card.json");
 });
 
 test("a character name can't smuggle a path into the filename", () => {

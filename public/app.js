@@ -101,6 +101,13 @@ let reveal = null;
 // When the typing indicator was last tapped (for double-tap detection).
 let lastTapTime = 0;
 
+// What you've typed into the name box but haven't committed yet. The
+// name is only written into `character` when you LEAVE the box, because
+// the chat's save slot is named after the character and a reply landing
+// mid-keystroke would be filed under a half-typed name and orphaned.
+// This holds the in-progress text so the preview can still show it.
+let pendingName = null;
+
 // What the character was called when you started editing the name box.
 // Renaming has to move the saved chat, and we need the old name to do
 // it. See finishRename().
@@ -228,6 +235,16 @@ function setCharacter(newCharacter) {
   }
 
   render();
+
+  // If the editor happens to be open, it's still showing the PREVIOUS
+  // card's text. Leave it and the next keystroke writes the old
+  // character's description into the new one, because each box writes
+  // its whole value back on every edit.
+  if (!templateEditor.hidden) {
+    renderCardEditor();
+    renderTemplateEditor();
+    refreshPrompt();
+  }
 }
 
 
@@ -585,6 +602,10 @@ function toggleChatStyle() {
   saveSetting(CHAT_STYLE_KEY, chatStyle ? "on" : "off");
   applyChatStyleSetting();
   revealAll(); // switching modes mid-reveal just shows everything
+
+  // One block only applies in chat style, so the preview is now out of
+  // date if the editor is open.
+  refreshPrompt();
 }
 
 // Makes the page match the `chatStyle` variable.
@@ -755,8 +776,11 @@ function render() {
       chatLog.append(createNoteElement(lastError, "error"));
     }
     sendButton.disabled = true;
+    blocksButton.disabled = true;
     return;
   }
+
+  blocksButton.disabled = false;
 
   // Remember whether you were already looking at the bottom of the
   // chat. If you scrolled up to reread something, we shouldn't yank
@@ -1105,6 +1129,8 @@ const CARD_FIELDS = [
 //  you type — see the long note on renderTemplateEditor for why.
 // ---------------------------------------------------------------------
 function renderCardEditor() {
+  // Drawing the boxes fresh means nothing is half-typed any more.
+  pendingName = null;
   cardFieldList.replaceChildren();
 
   // --- the name, which is a special case (see renameField) ---
@@ -1134,18 +1160,22 @@ function createCardField(key, label, rows) {
   caption.textContent = label;
 
   box.addEventListener("input", () => {
-    character[key] = box.value;
-
     if (key === "name") {
-      // Keep the heading honest while you type. The chat's save slot is
-      // named after the character, so RENAMING has to move the saved
-      // chat too — but not on every keystroke, or typing "Wren" would
-      // leave chats filed under "W", "Wr" and "Wre". That happens on
-      // `change` below, which fires once, when you leave the box.
-      nameHeading.textContent = character.name;
-      document.title = character.name + " — Tiny RP";
+      // The name is deliberately NOT written into `character` yet. The
+      // chat's save slot is named after the character, so if a reply
+      // arrived while you were half way through typing "Marisol", it
+      // would be saved under "Mari" and lost. The real rename happens
+      // on `change` below, which fires once, when you leave the box.
+      //
+      // The heading and the preview still follow along, using the
+      // in-progress text — see refreshPrompt.
+      pendingName = box.value;
+      nameHeading.textContent = box.value;
+      refreshPrompt();
+      return;
     }
 
+    character[key] = box.value;
     saveCharacter(character);
     refreshPrompt();
   });
@@ -1154,6 +1184,7 @@ function createCardField(key, label, rows) {
     // Remember what it was called when you started editing.
     box.addEventListener("focus", () => {
       nameBeforeEdit = character.name;
+      pendingName = character.name;
     });
     box.addEventListener("change", () => finishRename(box));
   }
@@ -1170,7 +1201,8 @@ function createCardField(key, label, rows) {
 // ---------------------------------------------------------------------
 function finishRename(box) {
   const from = nameBeforeEdit;
-  const to = character.name.trim();
+  const to = (pendingName ?? character.name).trim();
+  pendingName = null; // committed (or rejected) from here on
 
   // An empty name would give every chat the same save slot, and leave
   // the heading blank. Put the old one back rather than allowing it.
@@ -1178,6 +1210,7 @@ function finishRename(box) {
     character.name = from;
     box.value = from;
     nameHeading.textContent = from;
+    document.title = from + " — Tiny RP";
     saveCharacter(character);
     refreshPrompt();
     return;
@@ -1185,16 +1218,28 @@ function finishRename(box) {
 
   character.name = to;
   box.value = to;
+  document.title = to + " — Tiny RP";
 
   if (from && from !== to) {
     try {
-      const saved = localStorage.getItem(chatKeyFor(from));
+      const ours = localStorage.getItem(chatKeyFor(from));
+      const theirsExists = localStorage.getItem(chatKeyFor(to)) !== null;
 
-      // Only move it if the new name isn't already using a slot. If it
-      // is, that character has their own chat and it would be rude to
-      // write over it; you'll simply be looking at theirs from now on.
-      if (saved !== null && localStorage.getItem(chatKeyFor(to)) === null) {
-        localStorage.setItem(chatKeyFor(to), saved);
+      if (theirsExists) {
+        // That name already has a chat of its own. We must not write
+        // over it — but simply declining to move ours isn't enough
+        // either, because `messages` would still hold the old
+        // conversation and the very next save would land on their slot
+        // and destroy it anyway. So we switch to theirs: renaming onto
+        // an existing character means you're now in THAT chat.
+        const theirs = loadChat();
+        if (theirs) {
+          stopReveal();
+          chatChangeCount = chatChangeCount + 1;
+          messages = theirs;
+        }
+      } else if (ours !== null) {
+        localStorage.setItem(chatKeyFor(to), ours);
         localStorage.removeItem(chatKeyFor(from));
       }
     } catch (error) {
@@ -1229,8 +1274,7 @@ function exportCard() {
     },
   };
 
-  const slug = backupFilename(character.name).replace(/-chat-.*$/, "");
-  downloadJson(JSON.stringify(card, null, 2), `${slug}-card.json`);
+  downloadJson(JSON.stringify(card, null, 2), cardFilename(character.name));
 }
 
 
@@ -1290,10 +1334,16 @@ function renderTemplateEditor() {
     head.append(toggle, name);
 
     // Moving a block up or down is what reorders the prompt.
+    // These use their own helper rather than createButton(), which
+    // disables everything while a reply is generating. That's right for
+    // the chat — you shouldn't delete a message mid-reply — but nothing
+    // redraws this list when generation ends, so a block button
+    // disabled here would stay dead for the rest of the session.
+    // Rearranging blocks while waiting is harmless anyway.
     head.append(
-      createButton("↑", () => moveBlock(index, -1)),
-      createButton("↓", () => moveBlock(index, 1)),
-      createButton("✕", () => removeBlock(index))
+      createEditorButton("↑", () => moveBlock(index, -1)),
+      createEditorButton("↓", () => moveBlock(index, 1)),
+      createEditorButton("✕", () => removeBlock(index))
     );
 
     row.append(head);
@@ -1340,6 +1390,16 @@ function renderTemplateEditor() {
 
     blockList.append(row);
   });
+}
+
+
+// Like createButton, but never disabled: see the note above.
+function createEditorButton(label, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
 }
 
 
@@ -1424,7 +1484,12 @@ function resetTemplate() {
 // ---------------------------------------------------------------------
 function refreshPrompt() {
   if (!templateEditor.hidden && character !== null) {
-    const system = buildSystemMessage(character, USER_NAME, chatStyle, template);
+    // Preview against the name you're typing, which isn't committed to
+    // `character` until you leave the box.
+    const shown =
+      pendingName === null ? character : { ...character, name: pendingName };
+
+    const system = buildSystemMessage(shown, USER_NAME, chatStyle, template);
     const tokens = estimateTokens(system.content);
 
     templatePreview.textContent =
@@ -1658,6 +1723,14 @@ cardFileInput.addEventListener("change", handleCardFile);
 // The prompt block editor. Opening it draws the list and the preview;
 // after that, only changes redraw anything.
 blocksButton.addEventListener("click", () => {
+  // There is nothing to edit without a card, and everything below reads
+  // `character`. render() disables this button on the error screen, but
+  // guard here too: a disabled button can still be clicked from code,
+  // and the cost of being wrong is wiping the error off the page.
+  if (character === null) {
+    return;
+  }
+
   templateEditor.hidden = !templateEditor.hidden;
   blocksButton.textContent = templateEditor.hidden ? "Blocks" : "Hide blocks";
 

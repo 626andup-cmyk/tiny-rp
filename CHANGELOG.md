@@ -43,7 +43,7 @@ As always, **no README exercises were solved.**
 - **A live preview** under the editor, with a token count, updating as you type — whether you're editing the card or the blocks. This is the part that answers the original complaint: formatting affects how a model writes, and you can't judge that from a settings screen that hides the result.
 - **Blocks with nothing to say are dropped.** A character with no personality written no longer gets a bare `Personality:` heading introducing nothing. That is exactly the class of small, invisible mess that teaches a model to write badly, and a fixed template can't avoid it.
 - **Reset to default** puts everything back. The default template reproduces the old output **byte for byte** — verified by the token breakdown reporting identical numbers before and after — so none of this changes anything until you change something.
-- There are now **117 tests**, up from 101.
+- There are now **119 tests**, up from 101.
 
 ### Changed
 
@@ -52,9 +52,22 @@ As always, **no README exercises were solved.**
 
 ### How it was tested
 
-- All **117 tests** pass, including new ones for reordering, disabling, prose-instead-of-labels, empty-field dropping, nested macros, and that a template loaded from storage is validated before use.
+- All **119 tests** pass, including new ones for reordering, disabling, prose-instead-of-labels, empty-field dropping, nested macros, and that a template loaded from storage is validated before use.
 - **28 checks in a real browser** across two suites — the block editor and the character editor — at 390px and 320px. Among them: the live preview updating from both halves, the real sent prompt matching the edited blocks, edits surviving a reload, reset restoring, a rename carrying the chat across, an empty name being refused, and the exported card **loading back into the app**.
 - One test failed first and was wrong, not the code: it asserted the default prompt contained "keeps a lighthouse", which was never in it.
+
+### Fixed
+
+Eight problems found by reviewing this version's diff from scratch before calling it done, every one reproduced first. All of them were in `app.js` — the wiring between the new editor and the existing state — rather than in the new pure code, which is a fair summary of where bugs actually live.
+
+- **Renaming a character onto a name that already had a chat destroyed that chat.** The code politely declined to move your conversation over the top of theirs, but left `messages` holding yours, so the very next save landed on their slot anyway. Renaming onto an existing name now switches you into *their* chat, which is the only coherent thing it can mean.
+- **Loading a card while the editor was open corrupted the new card.** The boxes still held the previous character's text, and each one writes its whole value back on the next keystroke — so typing a single letter pasted the old description into the new character. The editor now redraws when the character changes.
+- **Pressing Blocks on the card-load error screen blanked the page**, hiding the chat log that was carrying the explanation and then throwing. Same shape as a bug fixed in version 5, in new code, which is why guards belong on the function rather than on each caller.
+- **The name was written into the character on every keystroke**, and a chat's save slot is named after the character. A reply arriving while you were half way through typing "Marisol" was filed under "Mari" and orphaned. The name is now only committed when you leave the box; the preview follows what you're typing without committing it.
+- **Deleting every block quietly came back on reload.** An empty template was treated as damage and replaced with the default, with a warning in the console calling your deliberate choice "damaged". An empty list is now a legitimate template meaning "send no system prompt".
+- **The block ↑ ↓ ✕ buttons could be dead for the whole session.** They were built with the helper that disables buttons during generation — right for the chat, wrong here, since nothing redraws the block list when generation finishes.
+- **Card filenames were carved out of backup filenames** by cutting `-chat-<date>` off the end with a regex. A character called "Group chat" lost the word from the middle of her own name, and one named in emoji produced `chat-2026-09-18.json-card.json`. Taking a substring of something another function formatted is almost always a mistake; it's built from the name now.
+- **Switching chat style didn't refresh the preview**, so the block that only applies in chat style appeared or vanished a beat late.
 
 ### A note on redrawing
 

@@ -313,7 +313,7 @@ test("isUsableTemplate accepts the default", () => {
 
 test("isUsableTemplate rejects anything that would break prompt building", () => {
   const rejects = [
-    null, undefined, 42, "a string", {}, [],
+    null, undefined, 42, "a string", {},
     [null],
     [{ id: "a" }],                                          // no text
     [{ id: "a", label: "A", text: 42, enabled: true }],     // text isn't text
@@ -324,6 +324,13 @@ test("isUsableTemplate rejects anything that would break prompt building", () =>
   for (const reject of rejects) {
     expect(isUsableTemplate(reject)).toBe(false);
   }
+});
+
+test("an empty template is allowed, not treated as damage", () => {
+  // Deleting every block is a legitimate thing to want: it means "send
+  // no system prompt at all". Rejecting it here would quietly reset
+  // your template to the default on the next reload.
+  expect(isUsableTemplate([])).toBe(true);
 });
 
 test("defaultTemplate hands out a fresh copy each time", () => {
