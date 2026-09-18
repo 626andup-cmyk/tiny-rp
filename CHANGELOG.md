@@ -12,11 +12,15 @@ Everything Tiny RP remembers — every chat, the card you loaded, whether chat s
 
 The file format is the part worth reading. It would be easy to dump the `messages` array to a file and call it done; `chat-backup.js` explains why it says what format and version it is instead, and that's a lesson that applies to every file you'll ever design.
 
-The other two additions are both about making it cheaper to learn.
+The other three additions are about making it cheaper to learn, and easier to see what the app is doing.
 
 **Practice mode** exists because every real reply costs money and needs a connection, which is a bad deal when what you're doing is pressing Send forty times to see how a typing delay feels. Now there's a pretend provider that makes replies up locally, with commands to make it fail, stall, or send twenty bubbles on purpose. You can take the whole app apart on a bus with no signal and no credit.
 
 **Property-based tests** are in here because they're one of the highest-value ideas in testing and almost nobody gets taught them. Rather than writing examples, you state a rule that must hold for every input and let the computer invent the inputs. It earned its place immediately by finding a real bug that had survived three versions — see Fixed, below.
+
+**The prompt size breakdown** answers the question every roleplayer eventually asks: why does she start forgetting things so soon? Show prompt now itemises where the budget goes, and the answer is usually "your example messages", which you can do something about.
+
+There's also a lot in Fixed. Six real bugs turned up, several of them the kind that lose data quietly rather than crashing — and the tools that found them (a fuzzer, a chaos test, a slow fake provider, and a proper read of the diff) are described alongside, because how you go looking is more reusable than any individual fix.
 
 As always, **no README exercises were solved.** Neither backing up nor practice mode is one of them. Four new exercises (19 to 22) were added, built on the new code.
 
@@ -39,7 +43,7 @@ As always, **no README exercises were solved.** Neither backing up nor practice 
   This is the most useful thing in the app for anyone who writes cards. The card is a *fixed* cost paid in full on every single turn, before a word of conversation. A card with 1,500 tokens of example messages has spent a quarter of a 6,000-token budget before you say hello — and that, not the model being forgetful, is why your character loses the thread so early. You can't see that in one total. You can see it instantly in a list.
 
   The counting and the message come from **the same function**, `systemMessageParts`, so they can't drift apart and start reporting numbers that aren't true. There's a test asserting the parts joined back together are exactly the message that gets sent.
-- **17 tests for the prompt builder**, which had none before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
+- **20 tests for the prompt builder**, which had none at all before it moved out of `app.js` — see Changed, below. They cover macro filling in both spellings, the old `<BOT>`/`<USER>` forms, missing card fields, `<START>` stripping, the chat-style instruction appearing only in chat style, and five regression tests for the `$` bug.
 - **Property-based tests** (`tests/properties.test.js`), a kind of test that makes up its own examples. Instead of "for this input, expect that output," each one states a rule that must hold for *every* input, and a few hundred deliberately horrible inputs are generated to test it against. The rules cover: bubbles are never empty, no tag ever survives splitting, wrapping-then-splitting matches splitting, the prompt never exceeds its budget, the reported token count matches what's actually sent, random bytes never crash the PNG reader, and any chat that's saved can be loaded back unchanged.
   - The randomness is deliberately **fake** — a hand-written generator with a fixed seed — so the test is identical on every run. A test that fails one run in fifty is worse than no test. Change one number at the top to go hunting for new bugs.
 - There are now **101 tests**, up from 37.

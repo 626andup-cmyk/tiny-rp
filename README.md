@@ -52,6 +52,7 @@ tiny-rp/
 ├── .gitignore           Tells git never to upload config.json.
 ├── README.md            This file.
 ├── CHANGELOG.md         What changed in each version, and why.
+├── LICENSE              The terms you can use and share this under.
 ├── public/              Everything in here gets sent to the browser.
 │   ├── index.html       The page's structure (the nouns).
 │   ├── style.css        The page's look (the adjectives).
