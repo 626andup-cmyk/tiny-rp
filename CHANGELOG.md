@@ -2,6 +2,73 @@
 
 A record of what changed, and more importantly *why*. Real projects keep a file like this so that future-you (or anyone else) can understand decisions without digging through old chats.
 
+## Version 6
+
+### Why these features
+
+This one came from a complaint, which is usually where the good features come from. Paraphrasing: *the concept of a card creator on board is good, but the results are too rigid — the formatting is so unnatural that it affects the output. I want to fully customise the blocks, and to be able to hook into the prompt builder.*
+
+That's a sharper observation than it looks, and the uncomfortable part is that **Tiny RP had exactly the same problem.** It glued every card into one fixed shape:
+
+```
+Description:
+<your text>
+
+Personality:
+<your text>
+```
+
+That's a choice, it was made for you, and it has consequences. Models copy the shape of what they're shown. Hand one a filled-in form and you tend to get form-shaped writing back — clipped, declarative, a bit dead. It isn't the model being bad at prose; it's doing what it was shown.
+
+So the shape is now yours, and the card is editable in the app rather than in a text file. The two together are the point: you can rewrite a block, watch the prompt change under it as you type, and see what the model will actually get.
+
+There was a lucky accident behind it. Version 5 split the prompt builder into `systemMessageParts` purely so the token breakdown could count each piece — and that turned out to be exactly the seam this needed. Making the pieces *data* rather than hardcoded string-joining was a much smaller change from there than it would have been a day earlier. Worth remembering: clean seams pay out later, in ways you don't plan.
+
+As always, **no README exercises were solved.**
+
+### Added
+
+- **A character editor**, in the app. Name, description, personality, scenario, greeting and example messages, all editable in the browser. Changes save as you make them.
+  - **Save card to a file** writes a standard `chara_card_v2` JSON card. Other apps can read it, and Tiny RP can load it straight back in — which the tests check by doing exactly that round trip.
+  - **Renaming a character brings their chat with them.** A chat's save slot is named after the character, so a rename would otherwise look like it had deleted the conversation. It moves on the way *out* of the name box rather than on each keystroke — otherwise typing "Wren" would leave chats filed under "W", "Wr" and "Wre". An empty name is refused, since every character would then share one slot.
+- **An editable prompt template** (`public/prompt-template.js`). The system prompt is a list of blocks you can reorder, switch off, relabel and rewrite. A block's text is itself a template, and card fields are macros with the same spelling cards already use:
+
+  ```
+  Description:\n{{description}}        the old, labelled way
+  {{char}} is {{description}}          a sentence instead
+  Keep replies under three sentences.  your own words, no card at all
+  ```
+
+  One mechanism — macros — does reordering, disabling, relabelling and rewriting. `{{char}}`, `{{user}}`, `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{greeting}}` and `{{examples}}` are all available, and macros nested *inside* a card field get filled too.
+- **A live preview** under the editor, with a token count, updating as you type — whether you're editing the card or the blocks. This is the part that answers the original complaint: formatting affects how a model writes, and you can't judge that from a settings screen that hides the result.
+- **Blocks with nothing to say are dropped.** A character with no personality written no longer gets a bare `Personality:` heading introducing nothing. That is exactly the class of small, invisible mess that teaches a model to write badly, and a fixed template can't avoid it.
+- **Reset to default** puts everything back. The default template reproduces the old output **byte for byte** — verified by the token breakdown reporting identical numbers before and after — so none of this changes anything until you change something.
+- There are now **117 tests**, up from 101.
+
+### Changed
+
+- `prompt-builder.js` is folded into `prompt-template.js`. One file owning "card plus template becomes prompt" reads better than two with a cross-file dependency that the tests would have to work around.
+- The chat hides while the editor is open. Sharing the screen sounds friendlier and isn't: on a phone it left about one and a half blocks visible, and you spent the whole time scrolling a letterbox.
+
+### How it was tested
+
+- All **117 tests** pass, including new ones for reordering, disabling, prose-instead-of-labels, empty-field dropping, nested macros, and that a template loaded from storage is validated before use.
+- **28 checks in a real browser** across two suites — the block editor and the character editor — at 390px and 320px. Among them: the live preview updating from both halves, the real sent prompt matching the edited blocks, edits surviving a reload, reset restoring, a rename carrying the chat across, an empty name being refused, and the exported card **loading back into the app**.
+- One test failed first and was wrong, not the code: it asserted the default prompt contained "keeps a lighthouse", which was never in it.
+
+### A note on redrawing
+
+There's one place in this app where "just redraw everything" — the idea the whole README is built on — is the **wrong** answer, and the editor is it.
+
+Rebuilding the block list replaces every element in it, including the textarea you're typing into. The replacement isn't focused and has no cursor position, so redrawing on each keystroke drops your cursor after one letter. Text edits therefore update the data and the preview and deliberately leave the list alone; only structural changes (add, delete, move, toggle) redraw.
+
+The reason is worth keeping: the DOM is holding state of its own — what's focused, where the cursor sits, how far a box is scrolled — that our arrays don't describe. Wiping and rebuilding throws that away. It's the exact problem that makes real frameworks complicated, met here in about fifteen lines.
+
+### Not tested yet
+
+- **A card edited here, opened in another app.** The export follows the V2 spec and Tiny RP reads its own output, but no other tool has seen one.
+- Everything in version 5's list still applies.
+
 ## Version 5
 
 ### Why these features

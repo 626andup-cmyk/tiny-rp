@@ -135,6 +135,20 @@
     name tells you it's a distinct part of the page.
   -->
   <section id="template-editor" hidden>
+    <h2>The character</h2>
+
+    <p class="hint">
+      The card itself. These are what <code>{{description}}</code> and
+      friends stand for below, so the prompt updates as you type.
+      Changes are saved as you make them.
+    </p>
+
+    <div id="card-fields"></div>
+
+    <div class="editor-actions">
+      <button type="button" id="export-card-button">Save card to a file</button>
+    </div>
+
     <h2>Prompt blocks</h2>
 
     <p class="hint">

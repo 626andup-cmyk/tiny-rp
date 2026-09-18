@@ -20,7 +20,11 @@ Your own messages get wrapped in `<cht>` tags automatically, so you never have t
 
 **Back up / Restore** saves a chat to a file you can keep, and reads it back. Everything else Tiny RP remembers lives in your browser's storage, which is tied to one browser on one phone — clearing your browsing data wipes it, and so does a new phone. A backup is a plain `.json` file you can open in any text editor, holding the character *and* the messages, because half a roleplay is the character it was with. `chat-backup.js` explains why the file says what format and version it is, which is how file formats survive the programs that wrote them.
 
-**Blocks** lets you change the *shape* of the system prompt, not just what's in it. Until now the card was glued into a fixed form — `Description:`, newline, your text — and that choice was made for you. It's a choice with consequences: models copy the shape they're shown, so a filled-in form tends to get form-shaped writing back, clipped and a bit dead. That's what people mean when they say a card creator's formatting is so unnatural it affects the output.
+**Blocks** is a character editor and a prompt editor in one panel, and it's where this project stops being only a reading exercise.
+
+The top half is **the card**: name, description, personality, scenario, greeting and example messages, edited in the browser instead of by hand in a JSON file. **Save card to a file** writes a standard `.json` card that any other app can read — and that Tiny RP can load straight back in. Renaming a character brings their saved chat along with them.
+
+The bottom half lets you change the *shape* of the system prompt, not just what's in it. Until now the card was glued into a fixed form — `Description:`, newline, your text — and that choice was made for you. It's a choice with consequences: models copy the shape they're shown, so a filled-in form tends to get form-shaped writing back, clipped and a bit dead. That's what people mean when they say a card creator's formatting is so unnatural it affects the output.
 
 Press **Blocks** and the prompt becomes a list you can reorder, switch off, relabel and rewrite. A block's text is itself a template, and parts of the card are macros:
 
@@ -33,7 +37,7 @@ Description:
 Keep replies under three sentences. your own words, no card at all
 ```
 
-The preview underneath updates as you type, with a token count, so you can *see* the effect rather than guess at it. A block whose card fields are all empty is left out entirely — no more `Personality:` heading introducing nothing. Everything is remembered, and **Reset to default** puts it back exactly as it started.
+The preview underneath updates as you type — whether you're editing the card or the blocks — with a token count, so you can *see* the effect rather than guess at it. A block whose card fields are all empty is left out entirely — no more `Personality:` heading introducing nothing. Everything is remembered, and **Reset to default** puts it back exactly as it started.
 
 **Context memory** keeps long chats working. Models can only read so much at once, so when a chat outgrows the prompt budget, the oldest messages are left out of what gets sent. You can *see* this happen: those messages fade, and a dashed line reads "Wren can't see the 12 older messages above this line." Nothing is deleted; it's just out of the character's reach. **Show prompt** opens with a size summary, and a breakdown of where the space actually goes:
 

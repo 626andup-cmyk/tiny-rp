@@ -101,6 +101,11 @@ let reveal = null;
 // When the typing indicator was last tapped (for double-tap detection).
 let lastTapTime = 0;
 
+// What the character was called when you started editing the name box.
+// Renaming has to move the saved chat, and we need the old name to do
+// it. See finishRename().
+let nameBeforeEdit = null;
+
 // The list of blocks that become the system prompt. Yours to rearrange;
 // see prompt-template.js for what a block is, and the Blocks button for
 // editing them. Falls back to the default, which is exactly what Tiny RP
@@ -139,6 +144,8 @@ const blockList       = document.getElementById("block-list");
 const addBlockButton  = document.getElementById("add-block-button");
 const resetTemplateButton = document.getElementById("reset-template-button");
 const templatePreview = document.getElementById("template-preview");
+const cardFieldList   = document.getElementById("card-fields");
+const exportCardButton = document.getElementById("export-card-button");
 
 
 // =====================================================================
@@ -645,13 +652,24 @@ async function handleCardFile() {
 //  text editor and read your own chat. Worth it.
 // ---------------------------------------------------------------------
 function saveBackup() {
-  const text = JSON.stringify(buildBackup(character, messages), null, 2);
+  downloadJson(
+    JSON.stringify(buildBackup(character, messages), null, 2),
+    backupFilename(character.name)
+  );
+}
+
+
+// ---------------------------------------------------------------------
+//  downloadJson(text, filename)
+//  The actual plumbing, used by backups and by saving a card.
+// ---------------------------------------------------------------------
+function downloadJson(text, filename) {
   const blob = new Blob([text], { type: "application/json" });
   const address = URL.createObjectURL(blob);
 
   const link = document.createElement("a");
   link.href = address;
-  link.download = backupFilename(character.name);
+  link.download = filename;
   link.click();
 
   // Throw the temporary address away once the download has had a moment
@@ -1063,6 +1081,160 @@ function costLine(label, tokens, total) {
 
 
 // =====================================================================
+//  THE CHARACTER EDITOR
+//  The card itself, editable in the browser instead of by hand in a
+//  JSON file. Sits above the blocks, because these are the values the
+//  blocks' macros stand for.
+// =====================================================================
+
+// Which fields to show, in this order. `rows` is how tall the box
+// starts; you can drag any of them bigger.
+const CARD_FIELDS = [
+  { key: "description", label: "Description", rows: 4 },
+  { key: "personality", label: "Personality", rows: 3 },
+  { key: "scenario",    label: "Scenario",    rows: 3 },
+  { key: "first_mes",   label: "First message (the greeting)", rows: 4 },
+  { key: "mes_example", label: "Example messages", rows: 4 },
+];
+
+
+// ---------------------------------------------------------------------
+//  renderCardEditor()
+//  Draws the name box and one labelled box per field. Like the block
+//  list, this is built once when the editor opens and NOT redrawn as
+//  you type — see the long note on renderTemplateEditor for why.
+// ---------------------------------------------------------------------
+function renderCardEditor() {
+  cardFieldList.replaceChildren();
+
+  // --- the name, which is a special case (see renameField) ---
+  cardFieldList.append(createCardField("name", "Name", 1));
+
+  for (const field of CARD_FIELDS) {
+    cardFieldList.append(createCardField(field.key, field.label, field.rows));
+  }
+}
+
+
+// ---------------------------------------------------------------------
+//  createCardField(key, label, rows)
+//  One labelled box, wired to write straight into the character.
+// ---------------------------------------------------------------------
+function createCardField(key, label, rows) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "card-field";
+
+  const box = document.createElement("textarea");
+  box.rows = rows;
+  box.value = character[key] ?? "";
+  box.id = "card-field-" + key;
+
+  const caption = document.createElement("label");
+  caption.htmlFor = box.id;
+  caption.textContent = label;
+
+  box.addEventListener("input", () => {
+    character[key] = box.value;
+
+    if (key === "name") {
+      // Keep the heading honest while you type. The chat's save slot is
+      // named after the character, so RENAMING has to move the saved
+      // chat too — but not on every keystroke, or typing "Wren" would
+      // leave chats filed under "W", "Wr" and "Wre". That happens on
+      // `change` below, which fires once, when you leave the box.
+      nameHeading.textContent = character.name;
+      document.title = character.name + " — Tiny RP";
+    }
+
+    saveCharacter(character);
+    refreshPrompt();
+  });
+
+  if (key === "name") {
+    // Remember what it was called when you started editing.
+    box.addEventListener("focus", () => {
+      nameBeforeEdit = character.name;
+    });
+    box.addEventListener("change", () => finishRename(box));
+  }
+
+  wrapper.append(caption, box);
+  return wrapper;
+}
+
+
+// ---------------------------------------------------------------------
+//  finishRename(box)
+//  Runs when you leave the name box. Moves the saved chat to its new
+//  name so a rename doesn't look like it deleted the conversation.
+// ---------------------------------------------------------------------
+function finishRename(box) {
+  const from = nameBeforeEdit;
+  const to = character.name.trim();
+
+  // An empty name would give every chat the same save slot, and leave
+  // the heading blank. Put the old one back rather than allowing it.
+  if (to === "") {
+    character.name = from;
+    box.value = from;
+    nameHeading.textContent = from;
+    saveCharacter(character);
+    refreshPrompt();
+    return;
+  }
+
+  character.name = to;
+  box.value = to;
+
+  if (from && from !== to) {
+    try {
+      const saved = localStorage.getItem(chatKeyFor(from));
+
+      // Only move it if the new name isn't already using a slot. If it
+      // is, that character has their own chat and it would be rude to
+      // write over it; you'll simply be looking at theirs from now on.
+      if (saved !== null && localStorage.getItem(chatKeyFor(to)) === null) {
+        localStorage.setItem(chatKeyFor(to), saved);
+        localStorage.removeItem(chatKeyFor(from));
+      }
+    } catch (error) {
+      console.warn("Couldn't move the saved chat:", error);
+    }
+  }
+
+  nameBeforeEdit = to;
+  saveCharacter(character);
+  render();
+}
+
+
+// ---------------------------------------------------------------------
+//  exportCard()
+//  Saves the character as a .json card other apps can read. It's
+//  written in the V2 shape — fields inside a `data` object, with a
+//  `spec` saying which version it is — because that's what everything
+//  else expects. See card-loader.js, which reads exactly this.
+// ---------------------------------------------------------------------
+function exportCard() {
+  const card = {
+    spec: "chara_card_v2",
+    spec_version: "2.0",
+    data: {
+      name: character.name,
+      description: character.description ?? "",
+      personality: character.personality ?? "",
+      scenario: character.scenario ?? "",
+      first_mes: character.first_mes ?? "",
+      mes_example: character.mes_example ?? "",
+    },
+  };
+
+  const slug = backupFilename(character.name).replace(/-chat-.*$/, "");
+  downloadJson(JSON.stringify(card, null, 2), `${slug}-card.json`);
+}
+
+
+// =====================================================================
 //  THE PROMPT BLOCK EDITOR
 //  Lets you change the SHAPE of the system prompt, not just its
 //  contents. See the top of prompt-template.js for why that matters.
@@ -1278,8 +1450,15 @@ function refreshPrompt() {
 // =====================================================================
 
 // Each character gets its own chat save slot, named after the character.
+// Split in two because renaming a character has to move the saved chat
+// from one slot to the other, and needs to name a slot that isn't the
+// current character's. See finishRename().
+function chatKeyFor(name) {
+  return "tiny-rp-chat:" + name;
+}
+
 function storageKey() {
-  return "tiny-rp-chat:" + character.name;
+  return chatKeyFor(character.name);
 }
 
 function saveChat() {
@@ -1486,10 +1665,13 @@ blocksButton.addEventListener("click", () => {
   document.body.classList.toggle("editing-blocks", !templateEditor.hidden);
 
   if (!templateEditor.hidden) {
+    renderCardEditor();
     renderTemplateEditor();
     refreshPrompt();
   }
 });
+
+exportCardButton.addEventListener("click", exportCard);
 
 addBlockButton.addEventListener("click", addBlock);
 resetTemplateButton.addEventListener("click", resetTemplate);
