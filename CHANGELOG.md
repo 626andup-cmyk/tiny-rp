@@ -42,6 +42,7 @@ As with every version so far, **no README exercises were solved.** They're still
 - All **37 unit and integration tests** pass.
 - The two new server tests were **checked against the old code first**, and both failed on it — the malformed-body case returned `500` instead of `400`, and the missing-`messages` case returned `200`, having gone to the provider. A regression test that passes on the broken version isn't testing anything, so this is always worth doing.
 - The **whole suite passes with `config.json` moved away**, which is what CI and a fresh download see.
+- **GitHub Actions ran the suite and it passed** on the first push, on a clean machine with no `config.json` and no API key. That's the strongest evidence that a fresh download genuinely works — stronger than any check run here, because that machine had nothing of this one's on it.
 - The app was driven in a **real Chromium browser** against a fake provider, with 13 checks: the page loads and renders the greeting; a full send → reply round trip works; **Show prompt** shows the size summary and the system message; the API key never reaches the browser; and on the error path the page shows the message, disables Send, and logs no uncaught errors.
 - Path traversal was probed over a **raw socket** as well as through the test suite, to get past the fact that `curl` quietly tidies up `..` in paths before sending them. Worth knowing: for a while the defense looked stronger than it was, because the test client was fixing the attack.
 - A further **25 checks in real Chromium** covered the features that versions 2 and 3 had only ever tested in a *simulated* browser (happy-dom). All passed, and nothing needed fixing:
@@ -64,7 +65,6 @@ Both layers hold. But if you'd removed the check after reading only that comment
 
 - A **real AI provider**. Still only fakes. (The sandbox this was worked in can't reach `openrouter.ai` at all, which is its own kind of proof that nothing here needs it.)
 - A **real Weaver card**, same as before.
-- The **GitHub Actions workflow** hasn't run yet; it runs on the next push.
 - The **on-screen keyboard**, still. A real Chromium at phone size has no keyboard, so `interactive-widget=resizes-content` remains unverified. The *layout* around it is now checked at two phone sizes, which is as close as this gets without a phone.
 - **Double-tap on a real touchscreen.** It now passes in a real browser with touch emulation, which is better than before, but emulated taps have perfect timing and real thumbs don't. If 350 ms feels wrong, `DOUBLE_TAP_WINDOW_MS` is still the knob.
 
