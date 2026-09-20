@@ -25,6 +25,7 @@ const {
   macrosUsedIn,
   isUsableTemplate,
   defaultTemplate,
+  defaultTutorTemplate,
 } = require("../public/prompt-template.js");
 
 
@@ -253,6 +254,67 @@ test("a block with no card fields at all is always kept", () => {
   const labels = systemMessageParts({ name: "Ghost" }, "You", false)
     .map((part) => part.label);
   expect(labels).toEqual(["Instructions"]);
+});
+
+
+// ---------------------------------------------------------------------
+//  {{source}} — Tiny RP's own code, for the tutor.
+//
+//  It behaves like a card field but doesn't come from the card, because
+//  reading a file takes time and everything in this file is instant.
+//  app.js fetches it and hands it in.
+// ---------------------------------------------------------------------
+
+test("{{source}} is filled from what's handed in, not from the card", () => {
+  const filled = fillTemplateText("Read this:\n{{source}}", wren, "You", {
+    source: "const BUDGET = 6000;",
+  });
+  expect(filled).toBe("Read this:\nconst BUDGET = 6000;");
+});
+
+test("{{source}} counts as content, so macrosUsedIn reports it", () => {
+  expect(macrosUsedIn("Here: {{source}}")).toEqual(["source"]);
+});
+
+test("the source block disappears when no file has been shown", () => {
+  // This is what stops the tutor being told "here is the file" with no
+  // file attached — which is the difference between it asking you to
+  // load one and it inventing what the file probably says.
+  const template = [
+    { id: "a", label: "Always", enabled: true, text: "You are a tutor." },
+    { id: "b", label: "Source", enabled: true, text: "Here is the file:\n{{source}}" },
+  ];
+
+  const without = buildSystemMessage(wren, "You", false, template).content;
+  expect(without).toBe("You are a tutor.");
+  expect(without).not.toContain("Here is the file");
+
+  const withSource = buildSystemMessage(wren, "You", false, template, {
+    source: "const x = 1;",
+  }).content;
+  expect(withSource).toContain("Here is the file");
+  expect(withSource).toContain("const x = 1;");
+});
+
+test("the tutor's own template carries the source block", () => {
+  const tutor = { name: "Tutor", description: "Teaches.", personality: "Dry." };
+
+  const bare = buildSystemMessage(tutor, "You", false, defaultTutorTemplate()).content;
+  expect(bare).toContain("teaching You to program");
+  expect(bare).not.toContain("Here is the source");
+
+  const shown = buildSystemMessage(tutor, "You", false, defaultTutorTemplate(), {
+    source: "// prompt-budget.js",
+  }).content;
+  expect(shown).toContain("Here is the source");
+  expect(shown).toContain("// prompt-budget.js");
+});
+
+test("the tutor is not told to roleplay", () => {
+  const tutor = { name: "Tutor", description: "Teaches." };
+  const { content } = buildSystemMessage(tutor, "You", false, defaultTutorTemplate());
+  expect(content).not.toContain("ongoing roleplay");
+  expect(content).not.toContain("Never write");
 });
 
 

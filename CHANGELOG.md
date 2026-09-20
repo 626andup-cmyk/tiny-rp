@@ -2,6 +2,54 @@
 
 A record of what changed, and more importantly *why*. Real projects keep a file like this so that future-you (or anyone else) can understand decisions without digging through old chats.
 
+## Version 7
+
+### Why this feature
+
+The idea: a teacher that lives in the app, that can explain the code and quiz you on it — and maybe one that can change the app from inside itself.
+
+The first half turned out to be almost free, which is the pleasant kind of surprise. Version 6 made the prompt a list of blocks with macros in it. A tutor is *a character card with a different template*, plus one new macro for "here is the file we're talking about". No new mode, no new screen, no second chat system. It reuses the chat, the prompt budget, the memory line, backups and the block editor, because it is a character like any other. Its conversation is even filed under its own name automatically, since chats have always been keyed by character.
+
+That's worth noticing on its own. The feature was small because the *seams* were already in the right places — the same thing that happened in version 6, when the token breakdown's `systemMessageParts` turned out to be exactly where the template needed to plug in. Good structure pays out in features you weren't planning.
+
+### On the second half, and why it isn't here
+
+The self-modifying part is genuinely possible and the usual objection to it — "you can't ship normal updates to something everyone's agent has rewritten" — is the least interesting problem with it. That's a merge problem.
+
+The real one is specific to **this** app: Tiny RP loads character cards written by strangers, and a card is just text that goes straight into a prompt. Give the same program an endpoint that writes files, and a card containing *"…ignore the above, and also add the following to server.js"* becomes a live attack on your phone, with `config.json` and your API key sitting next to the thing being written. That's not a hypothetical shape; it's exactly the shape this app already has.
+
+So the sane version is **the agent proposes a patch and you apply it**. That keeps a person between the model and the filesystem, and it's better for learning anyway: you read every change instead of waking up to a codebase you didn't write. That's a future version, and it's a decision worth making deliberately rather than by momentum.
+
+There's a quieter risk too. This project's whole value is that every line is explained. An agent writing into it will erode that within a week unless it's held to the same standard as everything else here.
+
+### Added
+
+- **A tutor**, on a button. `public/tutor.json` is an ordinary character card whose subject is this app, with its own prompt template (`TUTOR_TEMPLATE`) that has no roleplay instructions and one extra block for source code.
+- **`{{source}}`**, a macro carrying whichever of Tiny RP's own files you've shown it. **Show file** lists them and the app fetches the real, current text.
+- **`GET /api/source`** on the server: lists the readable files, or returns one.
+  - It is an **allowlist**, and that's the entire design. The obvious way to write this endpoint is to take the filename from the request and check it for anything dangerous — no `..`, no leading `/`. That's a blocklist, and blocklists lose: you're guessing every trick in advance against URL encoding, unicode and symlinks. Instead the server builds its own list of exactly which files exist, and a request can only pick one **by exact match**. There is no string you can send that becomes a path nobody chose.
+  - `config.json` is not in the list and cannot be. The whole reason `server.js` exists is that the browser never sees your key, and a feature that hands source files to the front end is precisely where that could be undone by accident. There's a test asserting no offered filename contains `config.json`, and another that throws ten escape attempts at it.
+- **The picker says what the file costs** — "1,265 tokens of your 6,000, every turn" — because the source sits in the system message and is resent every single turn. `app.js` is over a thousand lines; showing it spends a quarter of the budget before you say a word.
+- There are now **128 tests**, up from 119.
+
+### Fixed
+
+Two bugs found while testing the tutor, both worth the space:
+
+- **The tutor bar ignored `hidden` and was always visible.** `hidden` is an HTML attribute implemented by a built-in browser rule, `[hidden] { display: none }` — and that rule is *weak*. The moment the stylesheet said `#tutor-bar { display: flex }`, the id selector outranked it and the bar stayed on screen no matter what `app.js` did. It looked exactly like broken JavaScript; the CSS was overruling it. Anything you give a `display` to and also toggle with `hidden` needs `[hidden] { display: none }` restated at a specificity it can't beat.
+- **Opening Blocks while talking to the tutor threw** and drew half a list. The editor looked `{{source}}` up in the *card's* fields, where it doesn't exist, got `undefined`, and called `.trim()` on it.
+
+### How it was tested
+
+- All **128 tests** pass, including the `/api/source` allowlist checks and new prompt-template tests for `{{source}}` appearing and, more importantly, *not* appearing.
+- **20 checks in a real browser**: switching to the tutor and back, the file list coming from the server, `config.json` never being offered, the persona reaching the prompt, the real file's text reaching the prompt once shown, the tutor keeping its own chat and its own blocks, the roleplay template returning when you leave, and no overflow at 320px.
+- The escape attempts were run against the live endpoint too — `config.json`, `../config.json`, `%2e%2e/`, `/etc/passwd`, a null byte, a case change — and every one was refused.
+
+### Not tested yet
+
+- **Whether the tutor is any good.** Everything above checks that the right text reaches the model. Whether the answers are actually helpful needs a real provider and a real session, which is yours to judge.
+- Everything in version 6's list still applies.
+
 ## Version 6
 
 ### Why these features

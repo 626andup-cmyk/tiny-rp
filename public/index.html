@@ -87,6 +87,7 @@
       <button type="button" id="load-card-button" title="Open a .png or .json character card">Load card</button>
       <button type="button" id="show-prompt-button" title="See exactly what gets sent to the AI">Show prompt</button>
       <button type="button" id="blocks-button" title="Change the shape of the system prompt">Blocks</button>
+      <button type="button" id="tutor-button" title="Talk to a tutor about this app's own code">Tutor</button>
       <button type="button" id="back-up-button" title="Save this chat to a file you can keep">Back up</button>
       <button type="button" id="restore-button" title="Load a chat back from a backup file">Restore</button>
       <button type="button" id="new-chat-button" title="Erase this chat and start over">New chat</button>
@@ -113,6 +114,19 @@
     screen readers "when new stuff appears in here, read it out
     loud once you're done with whatever you're saying."
   -->
+  <!--
+    Only shown while you're talking to the tutor. Picking a file here
+    puts that file's real source into the tutor's prompt, which is what
+    stops it guessing at what the code probably says.
+  -->
+  <div id="tutor-bar" hidden>
+    <label for="source-picker">Show file</label>
+    <select id="source-picker">
+      <option value="">(none — it can only talk in general)</option>
+    </select>
+    <span id="source-cost" class="hint"></span>
+  </div>
+
   <main id="chat-log" aria-live="polite"></main>
 
   <!--

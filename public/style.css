@@ -195,6 +195,65 @@ body {
 
 
 /* ---------------------------------------------------------------------
+   THE TUTOR BAR
+   ---------------------------------------------------------------------
+   Only visible while you're talking to the tutor. `flex-wrap` lets the
+   size note drop onto its own line on a narrow phone rather than
+   squeezing the picker.
+*/
+/*
+  `hidden` is an HTML attribute meaning "don't show this", and browsers
+  implement it with a built-in rule: [hidden] { display: none }.
+
+  That rule is weak. A selector with an id in it beats it, so the
+  moment we say `#tutor-bar { display: flex }` the bar becomes visible
+  ALWAYS — including when app.js has carefully set hidden = true. It
+  looked like the JavaScript was broken; the CSS was overruling it.
+
+  Hence the line below, which restates "hidden means hidden" at a
+  specificity the rest of this block can't beat. Anything you give a
+  `display` to and also toggle with `hidden` needs it.
+*/
+#tutor-bar[hidden] {
+  display: none;
+}
+
+#tutor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--bg);
+  font-size: 0.85rem;
+}
+
+#tutor-bar label {
+  color: var(--muted);
+}
+
+#source-picker {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* The "1,200 tokens every turn" note. It gets a whole line to itself
+   when the picker has taken the first one. */
+#source-cost {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+
+/* ---------------------------------------------------------------------
    THE PROMPT BLOCK EDITOR
    ---------------------------------------------------------------------
    Opened by the "Blocks" button. Like the prompt viewer, it sits

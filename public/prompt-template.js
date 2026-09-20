@@ -46,6 +46,9 @@
 //      {{greeting}}     the first message (not usually wanted here —
 //                       it's already the first thing in the chat)
 //      {{examples}}     the example messages, with <START> removed
+//      {{source}}       Tiny RP's own source code, when you've asked
+//                       the tutor to look at a file. app.js fetches it
+//                       and hands it in; everything here stays instant.
 //
 //  Card fields can themselves contain {{char}} and {{user}}, and they
 //  get filled too. Fields are substituted first, then names, so a
@@ -102,12 +105,81 @@ const DEFAULT_TEMPLATE = [
 ];
 
 
+// ---------------------------------------------------------------------
+//  The TUTOR's template. The tutor isn't a roleplay character, so it
+//  wants a different shape: no "write only their replies" instruction,
+//  and a block that carries the source code you've asked it to read.
+//
+//  It's an ordinary template. The Blocks editor edits this one while
+//  you're talking to the tutor, so if its teaching style annoys you,
+//  the fix is right there.
+//
+//  Note the last block: because a block whose content macros are all
+//  empty is dropped, the "here is the file" instruction disappears
+//  entirely until you actually show it a file. The tutor is never told
+//  it has source it hasn't got — which is the difference between it
+//  saying "load the file and I'll look" and it confidently inventing
+//  what the file probably says.
+// ---------------------------------------------------------------------
+const TUTOR_TEMPLATE = [
+  {
+    id: "tutor-role",
+    label: "Instructions",
+    enabled: true,
+    text:
+      "You are {{char}}, teaching {{user}} to program. The subject is Tiny RP: " +
+      "a small AI roleplay app that {{user}} is talking to you from inside.\n" +
+      "Answer briefly first and expand when asked. Prefer asking a question to " +
+      "giving a lecture. Never invent what code says — if you have not been " +
+      "shown a file, say so and ask for it.",
+  },
+  {
+    id: "tutor-persona",
+    label: "Who you are",
+    enabled: true,
+    text: "{{description}}\n\n{{personality}}",
+  },
+  {
+    id: "tutor-student",
+    label: "Who you're teaching",
+    enabled: true,
+    text: "{{scenario}}",
+  },
+  {
+    id: "tutor-style",
+    label: "How to answer",
+    enabled: true,
+    text: "Examples of the right register:\n{{examples}}",
+  },
+  {
+    id: "tutor-source",
+    label: "The file being read",
+    enabled: true,
+    text:
+      "Here is the source {{user}} is asking about. It is the real, current " +
+      "file — quote it exactly and refer to it by line where that helps.\n\n{{source}}",
+  },
+];
+
+
 // Which macros pull text out of the card. {{char}} and {{user}} aren't
 // in here: they're names, they're never "missing" in the same way, and
 // a block made only of the character's name is still worth keeping.
 const CARD_FIELD_MACROS = [
   "description", "personality", "scenario", "greeting", "examples",
 ];
+
+// Macros whose text comes from somewhere other than the card. At the
+// moment there's one: {{source}}, which is however much of Tiny RP's
+// own source code you've asked the tutor to look at. app.js fetches it
+// and passes it in, because reading a file takes time and everything in
+// this file is deliberately instant and testable.
+const EXTRA_MACROS = ["source"];
+
+// Everything that can be EMPTY, and so can make a block disappear.
+// A block that only exists to present content with nothing in it is
+// just a heading introducing nothing — see the note at the top.
+const CONTENT_MACROS = [...CARD_FIELD_MACROS, ...EXTRA_MACROS];
 
 
 // ---------------------------------------------------------------------
@@ -145,11 +217,25 @@ function macrosUsedIn(text) {
   const used = [];
   for (const match of String(text ?? "").matchAll(/\{\{\s*(\w+)\s*\}\}/gi)) {
     const name = match[1].toLowerCase();
-    if (CARD_FIELD_MACROS.includes(name) && !used.includes(name)) {
+    if (CONTENT_MACROS.includes(name) && !used.includes(name)) {
       used.push(name);
     }
   }
   return used;
+}
+
+
+// ---------------------------------------------------------------------
+//  contentValues(character, extras)
+//  Every macro that can be empty, and what it currently stands for.
+//  `extras` is for values that don't come from the card — today just
+//  the source code the tutor has been shown.
+// ---------------------------------------------------------------------
+function contentValues(character, extras = {}) {
+  return {
+    ...cardFields(character),
+    source: extras.source ?? "",
+  };
 }
 
 
@@ -185,11 +271,11 @@ function macrosUsedIn(text) {
 //  exactly as written. Any time you replace text with a value you
 //  didn't type yourself, use the function form.
 // ---------------------------------------------------------------------
-function fillTemplateText(text, character, userName) {
-  const fields = cardFields(character);
+function fillTemplateText(text, character, userName, extras = {}) {
+  const fields = contentValues(character, extras);
   let filled = String(text ?? "");
 
-  for (const name of CARD_FIELD_MACROS) {
+  for (const name of CONTENT_MACROS) {
     const pattern = new RegExp(`\\{\\{\\s*${name}\\s*\\}\\}`, "gi");
     filled = filled.replace(pattern, () => fields[name]);
   }
@@ -208,7 +294,7 @@ function fillTemplateText(text, character, userName) {
 //  The same shape this file used to build by hand, so the token
 //  breakdown in Show prompt keeps working and now names YOUR blocks.
 // ---------------------------------------------------------------------
-function applyTemplate(template, character, userName, chatStyle) {
+function applyTemplate(template, character, userName, chatStyle, extras = {}) {
   const parts = [];
 
   for (const block of template) {
@@ -220,7 +306,7 @@ function applyTemplate(template, character, userName, chatStyle) {
     }
 
     const fieldsUsed = macrosUsedIn(block.text);
-    const fields = cardFields(character);
+    const fields = contentValues(character, extras);
 
     // If a block exists only to present card fields, and every one of
     // them is empty, it has nothing to say. Keeping it would leave a
@@ -233,7 +319,7 @@ function applyTemplate(template, character, userName, chatStyle) {
       continue;
     }
 
-    const text = fillTemplateText(block.text, character, userName).trim();
+    const text = fillTemplateText(block.text, character, userName, extras).trim();
     if (text === "") {
       continue; // nothing left after filling
     }
@@ -263,12 +349,12 @@ function applyTemplate(template, character, userName, chatStyle) {
 //  keeps working and the app behaves exactly as it did before any of
 //  this existed.
 // ---------------------------------------------------------------------
-function systemMessageParts(character, userName, chatStyle, template = defaultTemplate()) {
-  return applyTemplate(template, character, userName, chatStyle);
+function systemMessageParts(character, userName, chatStyle, template = defaultTemplate(), extras = {}) {
+  return applyTemplate(template, character, userName, chatStyle, extras);
 }
 
-function buildSystemMessage(character, userName, chatStyle, template = defaultTemplate()) {
-  const content = systemMessageParts(character, userName, chatStyle, template)
+function buildSystemMessage(character, userName, chatStyle, template = defaultTemplate(), extras = {}) {
+  const content = systemMessageParts(character, userName, chatStyle, template, extras)
     .map((part) => part.text)
     .join("\n\n");
 
@@ -316,6 +402,11 @@ function defaultTemplate() {
   return JSON.parse(JSON.stringify(DEFAULT_TEMPLATE));
 }
 
+// The tutor's starting template, same deal.
+function defaultTutorTemplate() {
+  return JSON.parse(JSON.stringify(TUTOR_TEMPLATE));
+}
+
 
 // Share with the tests (see the note at the bottom of chat-style.js).
 if (typeof module !== "undefined") {
@@ -327,7 +418,10 @@ if (typeof module !== "undefined") {
     macrosUsedIn,
     isUsableTemplate,
     defaultTemplate,
+    defaultTutorTemplate,
     cardFields,
+    contentValues,
     CARD_FIELD_MACROS,
+    CONTENT_MACROS,
   };
 }

@@ -57,6 +57,13 @@
 const USER_NAME = "You";           // what {{user}} becomes in the prompt
 const CHARACTER_FILE = "character.json";
 
+// The tutor is an ordinary character card that happens to be about the
+// app itself. Its name is what tells the rest of the code to use the
+// tutor's prompt template instead of the roleplay one — see
+// currentTemplate(). Rename the card and you've turned the tutor off.
+const TUTOR_FILE = "tutor.json";
+const TUTOR_NAME = "Tutor";
+
 // Two taps closer together than this (in milliseconds) count as a
 // double-tap on the typing indicator.
 const DOUBLE_TAP_WINDOW_MS = 350;
@@ -65,6 +72,7 @@ const DOUBLE_TAP_WINDOW_MS = 350;
 const SAVED_CHARACTER_KEY = "tiny-rp-character";
 const CHAT_STYLE_KEY = "tiny-rp-chat-style";
 const TEMPLATE_KEY = "tiny-rp-template";
+const TUTOR_TEMPLATE_KEY = "tiny-rp-tutor-template";
 
 
 // ---------------------------------------------------------------------
@@ -119,6 +127,17 @@ let nameBeforeEdit = null;
 // did before any of this was editable.
 let template = loadTemplate();
 
+// The tutor's blocks, kept separately: it isn't a roleplay character
+// and wants a different shape. The Blocks editor edits whichever of the
+// two is currently in use.
+let tutorTemplate = loadTutorTemplate();
+
+// Which of Tiny RP's own files the tutor has been shown, and its text.
+// Empty means it hasn't been shown anything, and the block that would
+// have carried the code drops out of the prompt entirely.
+let sourceFile = "";
+let sourceText = "";
+
 // How many times we've swapped the whole chat out from under ourselves:
 // pressed New chat, loaded a card, restored a backup. It only ever goes
 // up, and the number itself means nothing. What matters is whether it
@@ -153,6 +172,10 @@ const resetTemplateButton = document.getElementById("reset-template-button");
 const templatePreview = document.getElementById("template-preview");
 const cardFieldList   = document.getElementById("card-fields");
 const exportCardButton = document.getElementById("export-card-button");
+const tutorButton     = document.getElementById("tutor-button");
+const tutorBar        = document.getElementById("tutor-bar");
+const sourcePicker    = document.getElementById("source-picker");
+const sourceCost      = document.getElementById("source-cost");
 
 
 // =====================================================================
@@ -167,26 +190,8 @@ async function init() {
   applyChatStyleSetting();
 
   try {
-    // Use the card you loaded last time, if there is one.
-    // Otherwise, ask the server for the default card.
-    let startingCharacter = loadSavedCharacter();
-    if (startingCharacter === null) {
-      // `fetch` is how the browser requests things over the network.
-      const response = await fetch(CHARACTER_FILE);
-
-      // fetch only rejects when the network itself fails. A 404 is a
-      // perfectly successful round trip that happens to carry bad news,
-      // so we have to check `ok` ourselves or we'd try to read an error
-      // page as if it were a character.
-      if (!response.ok) {
-        throw new Error(`the server answered ${response.status}`);
-      }
-
-      // Turn the response's JSON text into a JavaScript object.
-      startingCharacter = await response.json();
-    }
-
-    setCharacter(startingCharacter);
+    setCharacter(await loadStartingCharacter());
+    applyTutorSetting();
 
   } catch (error) {
     lastError =
@@ -203,6 +208,34 @@ async function init() {
     // the next button press from wiping this message off the screen.
     render();
   }
+}
+
+
+// ---------------------------------------------------------------------
+//  loadStartingCharacter()
+//  The card you loaded last time, or the default one. Used at startup
+//  and again when you leave the tutor, so "which character am I
+//  supposed to be talking to" is answered in exactly one place.
+// ---------------------------------------------------------------------
+async function loadStartingCharacter() {
+  const saved = loadSavedCharacter();
+  if (saved !== null) {
+    return saved;
+  }
+
+  // `fetch` is how the browser requests things over the network.
+  const response = await fetch(CHARACTER_FILE);
+
+  // fetch only rejects when the network itself fails. A 404 is a
+  // perfectly successful round trip that happens to carry bad news, so
+  // we have to check `ok` ourselves or we'd try to read an error page
+  // as if it were a character.
+  if (!response.ok) {
+    throw new Error(`the server answered ${response.status}`);
+  }
+
+  // Turn the response's JSON text into a JavaScript object.
+  return response.json();
 }
 
 
@@ -300,7 +333,9 @@ function startNewChat() {
 //  fitToBudget comes from prompt-budget.js.
 // ---------------------------------------------------------------------
 function planPrompt() {
-  const system = buildSystemMessage(character, USER_NAME, chatStyle, template);
+  const system = buildSystemMessage(
+    character, USER_NAME, chatStyle, currentTemplate(), { source: sourceText }
+  );
   const fit = fitToBudget(system, messages);
   return { system: system, firstIncluded: fit.firstIncluded, tokens: fit.tokens };
 }
@@ -777,10 +812,12 @@ function render() {
     }
     sendButton.disabled = true;
     blocksButton.disabled = true;
+    tutorButton.disabled = true;
     return;
   }
 
   blocksButton.disabled = false;
+  tutorButton.disabled = false;
 
   // Remember whether you were already looking at the bottom of the
   // chat. If you scrolled up to reread something, we shouldn't yank
@@ -1066,7 +1103,9 @@ function promptSizeSummary() {
   // And which part of the card, biggest first — the one you can act on.
   // [...array] copies it before sorting, because .sort() rearranges the
   // array you give it, and that one came from prompt-template.js.
-  const parts = [...systemMessageParts(character, USER_NAME, chatStyle, template)]
+  const parts = [...systemMessageParts(
+    character, USER_NAME, chatStyle, currentTemplate(), { source: sourceText }
+  )]
     .map((part) => ({ label: part.label, tokens: estimateTokens(part.text) }))
     .sort((a, b) => b.tokens - a.tokens);
 
@@ -1101,6 +1140,148 @@ function costLine(label, tokens, total) {
     (share * 100).toFixed(0).padStart(5) + "%  " +
     "█".repeat(filled) + "·".repeat(16 - filled)
   );
+}
+
+
+// =====================================================================
+//  THE TUTOR
+//  A character card that happens to be about this app, plus the ability
+//  to show it Tiny RP's own source. It isn't a separate mode with its
+//  own screen: it reuses the chat, the prompt budget, the memory line,
+//  backups, all of it. The only thing that makes it special is which
+//  template it uses and that it can be handed a file.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+//  isTutor() / currentTemplate()
+//  Which prompt shape applies right now. Keying off the character's
+//  NAME rather than a separate flag means there's no second piece of
+//  state that can disagree with the first — you can't be "in tutor
+//  mode" while talking to Wren.
+// ---------------------------------------------------------------------
+function isTutor() {
+  return character !== null && character.name === TUTOR_NAME;
+}
+
+function currentTemplate() {
+  return isTutor() ? tutorTemplate : template;
+}
+
+
+// ---------------------------------------------------------------------
+//  toggleTutor()
+//  Swaps between the tutor and whatever you were roleplaying with.
+//  Each keeps its own saved chat automatically, because chats are
+//  already filed by character name.
+// ---------------------------------------------------------------------
+async function toggleTutor() {
+  if (isGenerating) {
+    return; // a reply is on its way to the chat we'd be leaving
+  }
+
+  try {
+    if (isTutor()) {
+      // Back to the roleplay. setCharacter never saves the character,
+      // so the card you loaded is still the remembered one.
+      setCharacter(await loadStartingCharacter());
+    } else {
+      const response = await fetch(TUTOR_FILE);
+      if (!response.ok) {
+        throw new Error(`the server answered ${response.status}`);
+      }
+      setCharacter(await response.json());
+      await loadSourceList();
+    }
+    lastError = null;
+  } catch (error) {
+    lastError = `Couldn't switch: ${error.message}.`;
+  }
+
+  applyTutorSetting();
+  render();
+}
+
+
+// Makes the page match whether we're talking to the tutor.
+function applyTutorSetting() {
+  tutorBar.hidden = !isTutor();
+  tutorButton.textContent = isTutor() ? "Leave tutor" : "Tutor";
+  tutorButton.setAttribute("aria-pressed", String(isTutor()));
+}
+
+
+// ---------------------------------------------------------------------
+//  loadSourceList()
+//  Asks the server which of its own files it's willing to show. The
+//  list comes from the server rather than being written out here, so
+//  the two can't drift apart as files are added and removed.
+// ---------------------------------------------------------------------
+async function loadSourceList() {
+  // Only fill it once; the list doesn't change while the server runs.
+  if (sourcePicker.options.length > 1) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/source");
+    const data = await response.json();
+
+    for (const file of data.files ?? []) {
+      const option = document.createElement("option");
+      option.value = file;
+      option.textContent = file;
+      sourcePicker.append(option);
+    }
+  } catch (error) {
+    console.warn("Couldn't list the source files:", error);
+  }
+}
+
+
+// ---------------------------------------------------------------------
+//  showSourceFile(file)
+//  Fetches one file and puts it in the tutor's prompt.
+//
+//  Note what this costs: the file goes into the system message, which
+//  is sent again on EVERY turn. app.js is over a thousand lines, so
+//  showing it spends a good chunk of the budget before you say a word.
+//  That's why the picker reports the size — it's the same lesson as the
+//  Show prompt breakdown, in the place you'd most easily forget it.
+// ---------------------------------------------------------------------
+async function showSourceFile(file) {
+  if (file === "") {
+    sourceFile = "";
+    sourceText = "";
+    sourceCost.textContent = "";
+    render();
+    return;
+  }
+
+  sourceCost.textContent = "loading…";
+
+  try {
+    const response = await fetch("/api/source?file=" + encodeURIComponent(file));
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error ?? `the server answered ${response.status}`);
+    }
+
+    sourceFile = data.file;
+    sourceText = data.text;
+
+    const tokens = estimateTokens(sourceText);
+    sourceCost.textContent =
+      `${tokens.toLocaleString()} tokens of your ${PROMPT_BUDGET_TOKENS.toLocaleString()}, every turn`;
+
+  } catch (error) {
+    sourceFile = "";
+    sourceText = "";
+    sourceCost.textContent = "";
+    lastError = `Couldn't read ${file}: ${error.message}`;
+  }
+
+  render();
 }
 
 
@@ -1304,7 +1485,7 @@ function exportCard() {
 function renderTemplateEditor() {
   blockList.replaceChildren();
 
-  template.forEach((block, index) => {
+  currentTemplate().forEach((block, index) => {
     const row = document.createElement("div");
     row.className = "block-row";
 
@@ -1369,7 +1550,10 @@ function renderTemplateEditor() {
     // preview, and that's confusing without an explanation.
     const used = macrosUsedIn(block.text);
     if (used.length > 0 && character !== null) {
-      const fields = cardFields(character);
+      // contentValues, not cardFields: {{source}} isn't part of the
+      // card, and looking it up in the card gave `undefined`, which
+      // threw on .trim() and took the rest of the list with it.
+      const fields = contentValues(character, { source: sourceText });
       const empty = used.filter((field) => fields[field].trim() === "");
 
       const note = document.createElement("p");
@@ -1419,14 +1603,15 @@ function listOut(items) {
 //  saves, and redraws — state and render, same as the chat.
 // ---------------------------------------------------------------------
 function moveBlock(index, direction) {
+  const blocks = currentTemplate();
   const to = index + direction;
-  if (to < 0 || to >= template.length) {
+  if (to < 0 || to >= blocks.length) {
     return; // already at the end; nothing to do
   }
 
   // Swap the two entries. The [a, b] = [b, a] trick swaps without
   // needing a temporary variable.
-  [template[index], template[to]] = [template[to], template[index]];
+  [blocks[index], blocks[to]] = [blocks[to], blocks[index]];
 
   saveTemplate();
   renderTemplateEditor();
@@ -1434,10 +1619,11 @@ function moveBlock(index, direction) {
 }
 
 function removeBlock(index) {
-  if (!confirm(`Remove the "${template[index].label}" block?`)) {
+  const blocks = currentTemplate();
+  if (!confirm(`Remove the "${blocks[index].label}" block?`)) {
     return;
   }
-  template.splice(index, 1);
+  blocks.splice(index, 1);
   saveTemplate();
   renderTemplateEditor();
   refreshPrompt();
@@ -1449,7 +1635,7 @@ function addBlock() {
     return;
   }
 
-  template.push({
+  currentTemplate().push({
     // Date.now() is a quick way to get an id nothing else is using.
     id: "custom-" + Date.now(),
     label: label.trim(),
@@ -1466,7 +1652,11 @@ function resetTemplate() {
   if (!confirm("Put the blocks back exactly as they started?")) {
     return;
   }
-  template = defaultTemplate();
+  if (isTutor()) {
+    tutorTemplate = defaultTutorTemplate();
+  } else {
+    template = defaultTemplate();
+  }
   saveTemplate();
   renderTemplateEditor();
   refreshPrompt();
@@ -1489,7 +1679,9 @@ function refreshPrompt() {
     const shown =
       pendingName === null ? character : { ...character, name: pendingName };
 
-    const system = buildSystemMessage(shown, USER_NAME, chatStyle, template);
+    const system = buildSystemMessage(
+      shown, USER_NAME, chatStyle, currentTemplate(), { source: sourceText }
+    );
     const tokens = estimateTokens(system.content);
 
     templatePreview.textContent =
@@ -1619,10 +1811,12 @@ function loadSavedCharacter() {
   }
 }
 
-// The prompt blocks. Saved whenever you change one.
+// The prompt blocks. Saved whenever you change one. Which set gets
+// saved depends on who you're talking to — see currentTemplate().
 function saveTemplate() {
   try {
-    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(template));
+    const key = isTutor() ? TUTOR_TEMPLATE_KEY : TEMPLATE_KEY;
+    localStorage.setItem(key, JSON.stringify(currentTemplate()));
   } catch (error) {
     console.warn("Couldn't save the prompt blocks:", error);
   }
@@ -1655,6 +1849,28 @@ function loadTemplate() {
     return defaultTemplate();
   }
 }
+
+// The tutor's blocks, same story as loadTemplate above.
+function loadTutorTemplate() {
+  try {
+    const text = localStorage.getItem(TUTOR_TEMPLATE_KEY);
+    if (text === null) {
+      return defaultTutorTemplate();
+    }
+
+    const saved = JSON.parse(text);
+    if (!isUsableTemplate(saved)) {
+      console.warn("Ignoring damaged tutor blocks; using the default.");
+      return defaultTutorTemplate();
+    }
+
+    return saved;
+  } catch (error) {
+    console.warn("Couldn't load the tutor blocks:", error);
+    return defaultTutorTemplate();
+  }
+}
+
 
 // Tiny settings, stored as plain strings.
 function saveSetting(key, value) {
@@ -1745,6 +1961,10 @@ blocksButton.addEventListener("click", () => {
 });
 
 exportCardButton.addEventListener("click", exportCard);
+
+// The tutor, and the file it's allowed to read.
+tutorButton.addEventListener("click", toggleTutor);
+sourcePicker.addEventListener("change", () => showSourceFile(sourcePicker.value));
 
 addBlockButton.addEventListener("click", addBlock);
 resetTemplateButton.addEventListener("click", resetTemplate);

@@ -147,6 +147,14 @@ Bun.serve({
     }
 
     // -------------------------------------------------------------
+    //  JOB 3: hand the browser Tiny RP's own source code, so the
+    //  tutor can read the file you're asking about. Read-only.
+    // -------------------------------------------------------------
+    if (url.pathname === "/api/source" && request.method === "GET") {
+      return handleSource(url);
+    }
+
+    // -------------------------------------------------------------
     //  JOB 1: serve a file from /public.
     // -------------------------------------------------------------
     return serveStaticFile(url.pathname);
@@ -196,6 +204,84 @@ async function serveStaticFile(path) {
   // Bun also figures out the "content type" (HTML vs CSS vs JS)
   // from the file extension, so the browser knows what it got.
   return new Response(file);
+}
+
+
+// ---------------------------------------------------------------------
+//  THE READABLE FILES
+//  ---------------------------------------------------------------------
+//  The tutor can be shown Tiny RP's own source. This is the list of
+//  what it's allowed to see, worked out once when the server starts.
+//
+//  SECURITY: this is an ALLOWLIST, and that's the whole design.
+//
+//  The obvious way to build a "give me a file" endpoint is to take the
+//  name from the request and check it for anything dangerous — no "..",
+//  no leading "/", and so on. That's a blocklist, and blocklists lose:
+//  you're trying to imagine every trick in advance, against URL
+//  encoding, unicode, symlinks and whatever the next idea is.
+//
+//  So instead we never use the name from the request as a path at all.
+//  We build our own list of exactly which files exist, and the request
+//  can only pick one of them BY EXACT MATCH. A name that isn't in the
+//  list gets a 404, and there is no string you can send that turns into
+//  a path we didn't already choose. (See serveStaticFile for the other
+//  approach, and the regression test that keeps it honest.)
+//
+//  config.json is not in here, and cannot be: it holds your API key,
+//  and the whole reason server.js exists is that the browser never
+//  sees it. `*.json` is excluded from the root entirely.
+// ---------------------------------------------------------------------
+const READABLE_FILES = await findReadableFiles();
+
+async function findReadableFiles() {
+  const patterns = [
+    "*.js",              // server.js, fake-provider.js
+    "*.md",              // README.md, CHANGELOG.md
+    "public/*.js",
+    "public/*.css",
+    "public/*.html",
+    "public/*.json",     // character cards — no secrets in these
+    "tests/*.js",
+  ];
+
+  const found = [];
+  for (const pattern of patterns) {
+    // Bun.Glob lists files matching a pattern. `scan` walks the folder
+    // once; it never takes anything from the request.
+    for await (const path of new Bun.Glob(pattern).scan(".")) {
+      found.push(path);
+    }
+  }
+
+  // Sorting isn't required, it just makes the list in the app tidy.
+  return found.sort();
+}
+
+
+// ---------------------------------------------------------------------
+//  handleSource(url)
+//  With no `file`, lists what can be read. With one, returns it.
+// ---------------------------------------------------------------------
+async function handleSource(url) {
+  const wanted = url.searchParams.get("file");
+
+  if (wanted === null) {
+    return Response.json({ files: READABLE_FILES });
+  }
+
+  // The ONLY check that matters: is this exactly one of ours?
+  if (!READABLE_FILES.includes(wanted)) {
+    return Response.json(
+      { error: `Tiny RP doesn't offer a file called "${wanted}".` },
+      { status: 404 }
+    );
+  }
+
+  return Response.json({
+    file: wanted,
+    text: await Bun.file(wanted).text(),
+  });
 }
 
 

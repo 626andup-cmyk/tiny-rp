@@ -227,6 +227,81 @@ test("never serves the config file, however the path is disguised", async () => 
 
 
 // =====================================================================
+//  JOB 3: handing out Tiny RP's own source, for the tutor
+// =====================================================================
+
+test("lists the files the tutor is allowed to read", async () => {
+  const response = await fetch(baseUrl + "/api/source");
+  expect(response.status).toBe(200);
+
+  const { files } = await response.json();
+  expect(files).toContain("public/prompt-budget.js");
+  expect(files).toContain("server.js");
+  expect(files).toContain("tests/chat-style.test.js");
+});
+
+test("never offers config.json, whatever else it offers", async () => {
+  // The whole reason server.js exists is that the browser never sees
+  // your API key. A feature that hands source files to the front end
+  // is exactly where that could be undone by accident.
+  const { files } = await fetch(baseUrl + "/api/source").then((r) => r.json());
+
+  for (const file of files) {
+    expect(file).not.toContain("config.json");
+  }
+});
+
+test("hands over a real file, as it is on disk right now", async () => {
+  const response = await fetch(baseUrl + "/api/source?file=public/prompt-budget.js");
+  expect(response.status).toBe(200);
+
+  const data = await response.json();
+  expect(data.file).toBe("public/prompt-budget.js");
+  expect(data.text).toContain("function fitToBudget");
+});
+
+
+// ---------------------------------------------------------------------
+//  The security one, and the reason the endpoint is built the way it is.
+//
+//  serveStaticFile takes a path from the request and checks it for
+//  anything dangerous — a blocklist, and blocklists lose eventually.
+//  /api/source never uses the request's text as a path at all: it has
+//  its own list of files and the request can only pick one BY EXACT
+//  MATCH. There is no string that turns into a path nobody chose.
+//
+//  If someone ever "improves" that into building a path from the name,
+//  this test is what notices.
+// ---------------------------------------------------------------------
+test("no amount of cleverness gets a file that isn't on the list", async () => {
+  const attacks = [
+    "config.json",
+    "./config.json",
+    "../config.json",
+    "public/../config.json",
+    "%2e%2e/config.json",
+    "..%2fconfig.json",
+    "/etc/passwd",
+    "public/../../../../etc/passwd",
+    "public/app.js\u0000config.json",
+    "PUBLIC/APP.JS",
+  ];
+
+  for (const attack of attacks) {
+    const response = await fetch(
+      baseUrl + "/api/source?file=" + encodeURIComponent(attack)
+    );
+
+    expect(response.status).toBe(404);
+
+    const text = await response.text();
+    expect(text).not.toContain(TEST_API_KEY);
+    expect(text).not.toContain("root:");   // nothing from /etc/passwd
+  }
+});
+
+
+// =====================================================================
 //  JOB 2: relaying to the AI provider
 // =====================================================================
 

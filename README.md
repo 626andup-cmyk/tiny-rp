@@ -39,6 +39,15 @@ Keep replies under three sentences. your own words, no card at all
 
 The preview underneath updates as you type — whether you're editing the card or the blocks — with a token count, so you can *see* the effect rather than guess at it. A block whose card fields are all empty is left out entirely — no more `Personality:` heading introducing nothing. Everything is remembered, and **Reset to default** puts it back exactly as it started.
 
+**Tutor** is a teacher that lives in the app and whose textbook is the app. Press it and you're talking to a character whose job is explaining this code — and you can hand it any of Tiny RP's own files with **Show file**, so it reads the real thing instead of guessing at what the file probably says. Ask it what `fitToBudget` returns, or say *quiz me* and it asks the questions instead.
+
+It is not a separate mode with its own screen. It's a character card (`public/tutor.json`) with its own prompt template, so it reuses the chat, the memory line, backups, everything — and its conversation is filed under its own name like any other character's. The **Blocks** editor edits *its* blocks while you're talking to it, so if its teaching style annoys you, the fix is right there.
+
+Two details worth noticing, because they're the difference between a tutor and a confident liar:
+
+- The picker tells you what the file costs — *"1,265 tokens of your 6,000, every turn"* — because the source goes in the system message, which is resent on every single turn. `app.js` is over a thousand lines; showing it spends a quarter of your budget before you say a word.
+- Show it nothing and the "here is the file" block **vanishes from the prompt entirely**, rather than being sent empty. A model told it has a file it hasn't got will happily invent one.
+
 **Context memory** keeps long chats working. Models can only read so much at once, so when a chat outgrows the prompt budget, the oldest messages are left out of what gets sent. You can *see* this happen: those messages fade, and a dashed line reads "Wren can't see the 12 older messages above this line." Nothing is deleted; it's just out of the character's reach. **Show prompt** opens with a size summary, and a breakdown of where the space actually goes:
 
 ```
@@ -81,7 +90,8 @@ tiny-rp/
 │   ├── prompt-budget.js Decides how much chat history fits in the prompt.
 │   ├── prompt-template.js Decides what the system prompt looks like.
 │   ├── chat-backup.js   Saves a chat to a file, and reads one back.
-│   └── character.json   The default character card.
+│   ├── character.json   The default character card.
+│   └── tutor.json       The tutor's card. An ordinary card, about this app.
 ├── tests/               Automatic checks. Run them with `bun test`.
 │   ├── chat-style.test.js
 │   ├── card-loader.test.js
@@ -213,7 +223,7 @@ A screen redraws about every 16 ms, so past roughly 100 messages a render is no 
 
 ## Tests
 
-The `tests/` folder holds 119 automatic checks. Run them with:
+The `tests/` folder holds 128 automatic checks. Run them with:
 
 ```
 bun test
